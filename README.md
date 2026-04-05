@@ -25,7 +25,7 @@ This application provides a comprehensive solution for managing human resources 
 | Role | Member |
 |------|--------|
 | **Dev A** — Team Leader (Backend-first) | Erik Salihu |
-| **Dev B** — Partner (Frontend-first) | TBD |
+| **Dev B** — Partner (Frontend-first) | Donart Krasniqi |
 
 ## Features
 
