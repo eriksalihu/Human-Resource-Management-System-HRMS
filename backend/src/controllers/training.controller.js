@@ -7,7 +7,27 @@
 const Training = require('../models/Training');
 const TrainingParticipant = require('../models/TrainingParticipant');
 const Employee = require('../models/Employee');
+const Notification = require('../models/Notification');
 const { AppError } = require('../middleware/errorHandler');
+
+/**
+ * Best-effort notification — wrapped so a notification failure can never
+ * break the underlying mutation.
+ */
+const notify = async ({ userId, title, message, type = 'info', link }) => {
+  if (!userId) return;
+  try {
+    await Notification.create({
+      user_id: userId,
+      title,
+      message,
+      type,
+      link,
+    });
+  } catch (err) {
+    console.error('[notify] Training notification failed:', err.message);
+  }
+};
 
 /** Roles that may create/edit/delete trainings. */
 const PRIVILEGED_ROLES = ['Admin', 'HR Manager'];
@@ -392,6 +412,24 @@ const enroll = async (req, res, next) => {
     }
 
     const participant = await TrainingParticipant.findById(id);
+
+    // Notify the enrollee. When HR enrolls someone else this lands in the
+    // enrollee's inbox; when the user self-enrolls they get a confirmation.
+    const enrollee = await Employee.findById(employeeId);
+    if (enrollee) {
+      await notify({
+        userId: enrollee.user_id,
+        title: `Enrolled in "${training.titulli}"`,
+        message:
+          `You're now enrolled in "${training.titulli}" ` +
+          `(${training.data_fillimit} → ${training.data_perfundimit}` +
+          (training.lokacioni ? `, ${training.lokacioni}` : '') +
+          `). Open HRMS for full details.`,
+        type: 'success',
+        link: `/trainings`,
+      });
+    }
+
     res.status(201).json({
       success: true,
       message: 'Enrolled successfully',

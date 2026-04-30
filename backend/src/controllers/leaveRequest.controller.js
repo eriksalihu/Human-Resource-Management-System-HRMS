@@ -6,7 +6,27 @@
 
 const LeaveRequest = require('../models/LeaveRequest');
 const Employee = require('../models/Employee');
+const Notification = require('../models/Notification');
 const { AppError } = require('../middleware/errorHandler');
+
+/**
+ * Best-effort notification — wraps Notification.create() in try/catch so a
+ * failure here can never break the underlying mutation. Logs and moves on.
+ */
+const notify = async ({ userId, title, message, type = 'info', link }) => {
+  if (!userId) return;
+  try {
+    await Notification.create({
+      user_id: userId,
+      title,
+      message,
+      type,
+      link,
+    });
+  } catch (err) {
+    console.error('[notify] LeaveRequest notification failed:', err.message);
+  }
+};
 
 /** Valid leave types — must match the ENUM in the LeaveRequests table. */
 const VALID_TYPES = ['annual', 'sick', 'personal', 'maternity', 'paternity', 'unpaid'];
@@ -208,6 +228,32 @@ const create = async (req, res, next) => {
 
     const request = await LeaveRequest.findById(requestId);
 
+    // Notify the subject + their manager (if any) that a new request landed.
+    const subject = await Employee.findById(targetEmployeeId);
+    if (subject) {
+      await notify({
+        userId: subject.user_id,
+        title: 'Leave request submitted',
+        message: `Your ${lloji} leave (${data_fillimit} → ${data_perfundimit}) has been submitted and is pending approval.`,
+        type: 'info',
+        link: `/leaves`,
+      });
+
+      if (subject.menaxheri_id) {
+        const manager = await Employee.findById(subject.menaxheri_id);
+        if (manager) {
+          await notify({
+            userId: manager.user_id,
+            title: 'New leave request to review',
+            message: `${subject.first_name || ''} ${subject.last_name || ''}`.trim() +
+              ` has submitted a ${lloji} leave request (${data_fillimit} → ${data_perfundimit}).`,
+            type: 'warning',
+            link: `/leaves`,
+          });
+        }
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: 'Leave request submitted successfully',
@@ -243,6 +289,18 @@ const approve = async (req, res, next) => {
 
     const request = await LeaveRequest.findById(id);
 
+    // Notify the subject of the approval outcome.
+    const subject = await Employee.findById(existing.employee_id);
+    if (subject) {
+      await notify({
+        userId: subject.user_id,
+        title: 'Leave request approved',
+        message: `Your ${existing.lloji} leave (${existing.data_fillimit} → ${existing.data_perfundimit}) has been approved.`,
+        type: 'success',
+        link: `/leaves`,
+      });
+    }
+
     res.json({
       success: true,
       message: 'Leave request approved',
@@ -277,6 +335,18 @@ const reject = async (req, res, next) => {
     await LeaveRequest.setApprovalStatus(id, 'rejected', approver.id);
 
     const request = await LeaveRequest.findById(id);
+
+    // Notify the subject of the rejection outcome.
+    const subject = await Employee.findById(existing.employee_id);
+    if (subject) {
+      await notify({
+        userId: subject.user_id,
+        title: 'Leave request rejected',
+        message: `Your ${existing.lloji} leave (${existing.data_fillimit} → ${existing.data_perfundimit}) was not approved. Please reach out to your manager if you have questions.`,
+        type: 'error',
+        link: `/leaves`,
+      });
+    }
 
     res.json({
       success: true,

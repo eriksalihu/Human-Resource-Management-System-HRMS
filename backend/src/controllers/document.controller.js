@@ -10,7 +10,44 @@ const multer = require('multer');
 
 const Document = require('../models/Document');
 const Employee = require('../models/Employee');
+const Notification = require('../models/Notification');
 const { AppError } = require('../middleware/errorHandler');
+
+/** Documents expiring within this many days trigger an alert at upload time. */
+const EXPIRY_ALERT_DAYS = 60;
+
+/**
+ * Best-effort notification — wrapped so a notification failure can never
+ * break the underlying mutation.
+ */
+const notify = async ({ userId, title, message, type = 'info', link }) => {
+  if (!userId) return;
+  try {
+    await Notification.create({
+      user_id: userId,
+      title,
+      message,
+      type,
+      link,
+    });
+  } catch (err) {
+    console.error('[notify] Document notification failed:', err.message);
+  }
+};
+
+/**
+ * Compute days remaining between today (server-local) and a YYYY-MM-DD
+ * date. Returns null when the input is missing / invalid.
+ */
+const daysUntil = (yyyyMmDd) => {
+  if (!yyyyMmDd) return null;
+  const target = new Date(yyyyMmDd);
+  if (Number.isNaN(target.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target - today) / (1000 * 60 * 60 * 24));
+};
 
 /** Roles allowed to upload / edit / delete documents for any employee. */
 const PRIVILEGED_ROLES = ['Admin', 'HR Manager'];
@@ -289,6 +326,28 @@ const create = async (req, res, next) => {
     });
 
     const doc = await Document.findById(id);
+
+    // Heads-up notification when this document expires within the alert
+    // window. The full periodic-sweep is left for a future scheduler;
+    // here we catch the most common case (uploading something already
+    // close to expiry) right at the source.
+    const remaining = daysUntil(doc.data_skadimit);
+    if (remaining != null && remaining <= EXPIRY_ALERT_DAYS) {
+      await notify({
+        userId: employee.user_id,
+        title:
+          remaining < 0
+            ? `Document already expired: ${doc.emertimi}`
+            : `Document expiring soon: ${doc.emertimi}`,
+        message:
+          remaining < 0
+            ? `"${doc.emertimi}" expired on ${doc.data_skadimit}. Please upload an updated copy.`
+            : `"${doc.emertimi}" expires on ${doc.data_skadimit} (${remaining} day${remaining === 1 ? '' : 's'} away). Please plan to refresh it.`,
+        type: 'warning',
+        link: `/employees`,
+      });
+    }
+
     res.status(201).json({ success: true, data: { document: doc } });
   } catch (err) {
     next(err);

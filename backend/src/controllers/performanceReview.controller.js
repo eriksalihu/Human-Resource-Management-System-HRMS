@@ -6,7 +6,30 @@
 
 const PerformanceReview = require('../models/PerformanceReview');
 const Employee = require('../models/Employee');
+const Notification = require('../models/Notification');
 const { AppError } = require('../middleware/errorHandler');
+
+/**
+ * Best-effort notification — wrapped so a notification failure can never
+ * break the underlying mutation.
+ */
+const notify = async ({ userId, title, message, type = 'info', link }) => {
+  if (!userId) return;
+  try {
+    await Notification.create({
+      user_id: userId,
+      title,
+      message,
+      type,
+      link,
+    });
+  } catch (err) {
+    console.error(
+      '[notify] PerformanceReview notification failed:',
+      err.message
+    );
+  }
+};
 
 /** Roles that may create/edit any review (HR/Admin). */
 const PRIVILEGED_ROLES = ['Admin', 'HR Manager'];
@@ -278,6 +301,17 @@ const create = async (req, res, next) => {
       data_vleresimit,
     });
     const review = await PerformanceReview.findById(id);
+
+    // Notify the subject that a new review has landed for them.
+    await notify({
+      userId: subject.user_id,
+      title: 'New performance review',
+      message:
+        `A new ${periudha} performance review has been submitted for you ` +
+        `(rating: ${Number(nota).toFixed(1)} / 5.0). Open HRMS to view feedback and objectives.`,
+      type: 'info',
+      link: `/performance`,
+    });
 
     res.status(201).json({
       success: true,
