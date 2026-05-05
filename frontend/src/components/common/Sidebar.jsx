@@ -1,6 +1,6 @@
 /**
  * @file frontend/src/components/common/Sidebar.jsx
- * @description Collapsible sidebar navigation with links for all HR modules
+ * @description Collapsible sidebar navigation with dark-mode support, smooth collapse animation, and active route indicator
  * @author Dev B
  */
 
@@ -69,22 +69,39 @@ const navItems = [
 ];
 
 /**
- * Sidebar - Collapsible navigation sidebar component
- * Renders navigation links for all HR modules with active route highlighting.
+ * Sidebar - Collapsible navigation sidebar component.
+ *
+ * Visual treatment:
+ *   - Smooth width transition (`transition-[width]` over 300ms with
+ *     ease-in-out) for the collapse animation
+ *   - Inner content fades / shifts via `opacity` + `pointer-events-none`
+ *     when collapsed so labels don't bleed during the animation
+ *   - Tailwind `dark:` variants for every visible color (background,
+ *     text, hover, ring, active state)
+ *   - Active route gets a left-edge accent rail in addition to the
+ *     existing colored background, making the current page obvious at
+ *     a glance even on small displays
  *
  * @param {Object} props
  * @param {boolean} props.isOpen - Whether the sidebar is expanded
- * @returns {JSX.Element} The sidebar navigation
+ * @returns {JSX.Element}
  */
 const Sidebar = ({ isOpen }) => {
   return (
     <aside
-      className={`${
-        isOpen ? 'w-64' : 'w-0 overflow-hidden'
-      } bg-white border-r border-gray-200 min-h-[calc(100vh-4rem)] transition-all duration-300 ease-in-out fixed left-0 top-16 bottom-0 z-20`}
+      aria-label="Main navigation"
+      aria-hidden={!isOpen}
+      className={`fixed left-0 top-16 bottom-0 z-20 min-h-[calc(100vh-4rem)] overflow-hidden border-r transition-[width] duration-300 ease-in-out
+        ${isOpen ? 'w-64' : 'w-0'}
+        bg-white border-gray-200
+        dark:bg-gray-900 dark:border-gray-800`}
     >
-      <div className="p-4">
-        <p className="text-xs text-gray-400 uppercase tracking-wider mb-4 px-3">
+      <div
+        className={`p-4 transition-opacity duration-200 ${
+          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <p className="text-xs uppercase tracking-wider mb-4 px-3 text-gray-400 dark:text-gray-500">
           Menu
         </p>
         <nav className="space-y-1">
@@ -93,27 +110,42 @@ const Sidebar = ({ isOpen }) => {
               key={item.path}
               to={item.path}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 ${
+                `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150
+                ${
                   isActive
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
                 }`
               }
             >
-              <svg
-                className="w-5 h-5 flex-shrink-0"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d={item.icon}
-                />
-              </svg>
-              <span>{item.label}</span>
+              {({ isActive }) => (
+                <>
+                  {/* Active route accent rail */}
+                  <span
+                    aria-hidden="true"
+                    className={`absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full transition-opacity ${
+                      isActive
+                        ? 'bg-indigo-600 dark:bg-indigo-400 opacity-100'
+                        : 'opacity-0'
+                    }`}
+                  />
+                  <svg
+                    className="w-5 h-5 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d={item.icon}
+                    />
+                  </svg>
+                  <span className="truncate">{item.label}</span>
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
