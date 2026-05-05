@@ -1,88 +1,126 @@
 /**
  * @file frontend/src/layouts/MainLayout.jsx
- * @description Main dashboard layout with sidebar, top navbar, and content area
+ * @description Authenticated app shell — Navbar + Sidebar + scrollable content + Footer, with mobile-first responsive sidebar collapse and dark mode
  * @author Dev B
+ *
+ * Behavior overview:
+ *   - On wide screens (≥ lg) the sidebar is open by default and the main
+ *     content gets a left margin equal to the sidebar's width
+ *   - On smaller screens the sidebar is closed by default and slides in
+ *     as an overlay (so it doesn't push the layout around). A backdrop
+ *     covers the content while the overlay is visible — clicking it
+ *     closes the menu.
+ *   - The Navbar's hamburger toggles the sidebar; the same state powers
+ *     both the desktop "shrink" and the mobile "slide" presentations.
+ *   - Window resize is observed so a viewport that crosses the lg breakpoint
+ *     gets its sidebar reset to the sensible default for that size.
  */
 
-import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
+import Navbar from '../components/common/Navbar';
+import Sidebar from '../components/common/Sidebar';
+import Footer from '../components/common/Footer';
+
+/** Tailwind `lg` breakpoint in pixels — kept in JS so the responsive logic
+ * matches the CSS without forcing a media-query lookup. */
+const LG_BREAKPOINT_PX = 1024;
+
+/** Returns true when the viewport is at least `lg` wide. */
+const isLgViewport = () =>
+  typeof window !== 'undefined' && window.innerWidth >= LG_BREAKPOINT_PX;
 
 /**
- * MainLayout - Dashboard layout skeleton
- * Wraps authenticated pages with sidebar navigation and top navbar.
- * Uses Tailwind CSS grid/flex for responsive layout structure.
+ * MainLayout — wraps every authenticated route. Renders the top navbar,
+ * collapsible sidebar, scrollable content, and footer.
  *
- * @returns {JSX.Element} The main application layout
+ * @returns {JSX.Element}
  */
 const MainLayout = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  /** Sidebar open/closed. Default depends on initial viewport size. */
+  const [sidebarOpen, setSidebarOpen] = useState(() => isLgViewport());
+  const location = useLocation();
+
+  /**
+   * On viewport-crosses-breakpoint, reset to the sensible default so the
+   * user doesn't end up stuck with a desktop sidebar overlapping a mobile
+   * page (or vice-versa).
+   *
+   * Only fires when crossing the boundary — within a tier the user's
+   * explicit toggle is preserved.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    let wasLg = isLgViewport();
+    const handler = () => {
+      const nowLg = isLgViewport();
+      if (nowLg !== wasLg) {
+        wasLg = nowLg;
+        setSidebarOpen(nowLg);
+      }
+    };
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  /**
+   * Auto-close the sidebar after a route change when we're below the lg
+   * breakpoint — on mobile the overlay should dismiss as soon as the
+   * user picks a menu item.
+   */
+  useEffect(() => {
+    if (!isLgViewport()) {
+      setSidebarOpen(false);
+    }
+  }, [location.pathname]);
+
+  const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Top Navbar */}
-      <nav className="bg-white shadow-sm border-b border-gray-200 fixed top-0 left-0 right-0 z-30 h-16">
-        <div className="flex items-center justify-between h-full px-4">
-          {/* Left: Hamburger + Logo */}
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              aria-label="Toggle sidebar"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <span className="text-xl font-semibold text-gray-800">HRMS</span>
-          </div>
+    <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+      {/* Top navbar (fixed) */}
+      <Navbar onToggleSidebar={toggleSidebar} />
 
-          {/* Right: User area placeholder */}
-          <div className="flex items-center gap-4">
-            {/* Notification bell placeholder */}
-            <button className="p-2 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 relative">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </button>
+      {/* Mobile-only backdrop. Clicking dismisses the overlay sidebar. */}
+      <button
+        type="button"
+        onClick={closeSidebar}
+        aria-label="Close sidebar"
+        aria-hidden={!sidebarOpen}
+        tabIndex={sidebarOpen ? 0 : -1}
+        className={`fixed inset-0 top-16 z-10 bg-black/40 transition-opacity duration-200 lg:hidden ${
+          sidebarOpen
+            ? 'opacity-100'
+            : 'opacity-0 pointer-events-none'
+        }`}
+      />
 
-            {/* User profile placeholder */}
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-sm font-medium">
-                U
-              </div>
-              <span className="text-sm text-gray-700 hidden md:block">User</span>
-            </div>
-          </div>
-        </div>
-      </nav>
+      {/* Layout body — sidebar (fixed) + main column */}
+      <div className="flex flex-1 pt-16">
+        {/* Sidebar — fixed-position, left-edge, sized by inner state */}
+        <Sidebar isOpen={sidebarOpen} />
 
-      {/* Layout body */}
-      <div className="flex pt-16">
-        {/* Sidebar */}
-        <aside
-          className={`${
-            sidebarOpen ? 'w-64' : 'w-0 overflow-hidden'
-          } bg-white border-r border-gray-200 min-h-[calc(100vh-4rem)] transition-all duration-300 ease-in-out fixed left-0 top-16 bottom-0 z-20`}
+        {/* Main column: content + footer. Margin shifts on lg when sidebar
+            is open; on smaller screens the sidebar overlays so margin stays 0. */}
+        <div
+          className={`flex-1 flex flex-col min-w-0 transition-[margin] duration-300 ease-in-out ${
+            sidebarOpen ? 'lg:ml-64' : 'lg:ml-0'
+          }`}
         >
-          <div className="p-4">
-            {/* Sidebar navigation placeholder */}
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-4">Navigation</p>
-            <nav className="space-y-1">
-              <p className="text-sm text-gray-500 px-3 py-2">Sidebar content will go here</p>
-            </nav>
-          </div>
-        </aside>
-
-        {/* Main content area */}
-        <main
-          className={`${
-            sidebarOpen ? 'ml-64' : 'ml-0'
-          } flex-1 transition-all duration-300 ease-in-out`}
-        >
-          <div className="p-6">
+          {/* Scrollable content area. min-h ensures footer sits at the bottom
+              even on short pages without forcing the page to scroll. */}
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className="flex-1 min-h-[calc(100vh-4rem-3rem)] focus:outline-none"
+          >
             <Outlet />
-          </div>
-        </main>
+          </main>
+
+          {/* Footer */}
+          <Footer />
+        </div>
       </div>
     </div>
   );
