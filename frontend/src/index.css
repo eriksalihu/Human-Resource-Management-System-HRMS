@@ -1,11 +1,165 @@
+/**
+ * @file frontend/src/index.css
+ * @description Global stylesheet — Tailwind layer imports, custom font, scrollbar styling, text-selection colors, focus-ring polish, transition defaults, and dark-mode body chrome
+ *
+ * Loaded once via main.jsx. Anything truly global (font face, body bg,
+ * scrollbar) lives here; per-component styling stays in JSX via Tailwind
+ * utility classes.
+ */
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Custom font — Inter from Google Fonts. Loaded with display=swap so the
+ * page paints with the system fallback before Inter arrives, avoiding a
+ * blank flash on slow networks.
+ * ─────────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ─────────────────────────────────────────────────────────────────────
+ * Base layer — runs at CSS reset / element-default precedence so app
+ * components can still override via Tailwind utilities.
+ * ─────────────────────────────────────────────────────────────────── */
+@layer base {
+  /* Honour the user's reduced-motion preference for any animation we
+     own (Tailwind keyframes still respect their `motion-safe:` variants
+     — this catches the rest, including transitions on third-party libs). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  html {
+    /* `color-scheme` picks form-control / scrollbar colors that match
+       the active palette. Toggled at runtime by ThemeContext; this
+       declaration sets the default for users with no preference yet. */
+    color-scheme: light;
+    scroll-behavior: smooth;
+    /* Prevent iOS auto-zoom on input focus when the input font is < 16px. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    font-family:
+      'Inter',
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      Roboto,
+      'Helvetica Neue',
+      Arial,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* Match the MainLayout's neutral background so the body fill behind
+       a not-yet-mounted layout doesn't flash white in dark mode. */
+    @apply bg-gray-50 text-gray-900;
+  }
+
+  html.dark body {
+    @apply bg-gray-950 text-gray-100;
+  }
+
+  /* Heading rhythm — Inter handles the hard work; we just lean on the
+     custom `tight` line-height we added in the Tailwind config. */
+  h1, h2, h3, h4, h5, h6 {
+    font-feature-settings: 'cv11', 'ss01';
+    line-height: 1.15;
+  }
+
+  /* Text selection — branded indigo, falls back to default in dark mode
+     where the indigo would be too dim against white text. */
+  ::selection {
+    background-color: #c7d2fe; /* indigo-200 */
+    color: #1e1b4b; /* indigo-950 */
+  }
+
+  html.dark ::selection {
+    background-color: #4338ca; /* indigo-700 */
+    color: #ffffff;
+  }
+
+  /* Visible focus ring on every keyboard-focused control. Mirrors the
+     Tailwind `focus-visible:ring-2 focus-visible:ring-indigo-500` we use
+     on most buttons but also covers third-party / native controls. */
+  :focus-visible {
+    outline: 2px solid #6366f1; /* indigo-500 */
+    outline-offset: 2px;
+  }
+
+  /* Strip the default outline from inputs / buttons — the focus-visible
+     rule above replaces it with a consistent ring. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Components layer — one-off compound utilities that aren't worth a
+ * full plugin but want the @apply ergonomics.
+ * ─────────────────────────────────────────────────────────────────── */
+@layer components {
+  /* Generic transition default. Components can opt into faster /
+     slower variants via Tailwind utilities; this gives the rest a sane
+     baseline so hover states feel cohesive. */
+  .transition-base {
+    @apply transition duration-200 ease-in-out;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Custom scrollbar — Webkit + Firefox.
+ * Light mode keeps it subtle; dark mode bumps the thumb so it's visible
+ * against the gray-900 chrome.
+ * ─────────────────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent; /* slate-300 thumb, transparent track */
+}
+
+html.dark * {
+  scrollbar-color: #374151 transparent; /* gray-700 thumb */
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1; /* slate-300 */
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8; /* slate-400 */
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background-color: #374151; /* gray-700 */
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: #4b5563; /* gray-600 */
 }
