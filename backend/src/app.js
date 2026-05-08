@@ -2,31 +2,84 @@
  * @file backend/src/app.js
  * @description Express application setup with middleware stack and route mounting
  * @author Dev A
+ *
+ * Middleware order matters and is intentional:
+ *   1. Trust proxy (so req.ip honors X-Forwarded-For when behind a proxy)
+ *   2. Security headers (helmet) — set before any response is generated
+ *   3. CORS — must precede body parsers so preflight responds without parsing
+ *   4. Compression — applies to every successful response
+ *   5. Logging — captures everything below it
+ *   6. Body / cookie parsing with strict size limits
+ *   7. Sanitization — runs AFTER body parsing, BEFORE controllers
+ *   8. Routes — each router applies its own auth + role guards
+ *   9. 404 fallback (scoped to /api)
+ *  10. Error handler — must be last
  */
 
 const express = require('express');
 const cors = require('cors');
-const helmet = require('helmet');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const compression = require('compression');
+
 const corsOptions = require('./config/cors');
 const errorHandler = require('./middleware/errorHandler');
+const securityHeaders = require('./middleware/helmet');
+const sanitize = require('./middleware/sanitize');
+
+/**
+ * Body-size limits.
+ *   - JSON / urlencoded: 1 MB. Plenty for any HRMS payload (the largest
+ *     CRUD body — bulk salary creation — clocks in around 50 KB).
+ *     Locking it down stops a malicious caller from sending a 100 MB
+ *     JSON to chew through memory.
+ *   - File uploads: 10 MB enforced at the multer layer (see
+ *     `controllers/document.controller.js`). The JSON limit doesn't
+ *     apply to multipart bodies since multer parses the stream itself.
+ */
+const JSON_BODY_LIMIT = '1mb';
+const URLENCODED_BODY_LIMIT = '1mb';
 
 const app = express();
 
-// ==================== Security Middleware ====================
-app.use(helmet()); // Set security HTTP headers
-app.use(cors(corsOptions)); // Enable CORS with configured options
+// ==================== Trust Proxy ====================
+// One hop is the typical setup for a single reverse proxy (nginx,
+// Cloudflare). Update if you sit behind multiple layers — the value
+// drives `req.ip`, which feeds rate-limiting and audit logs.
+app.set('trust proxy', 1);
 
-// ==================== Logging ====================
-app.use(morgan('dev')); // HTTP request logging
+// Drop the `X-Powered-By: Express` header explicitly. Helmet does this
+// too, but having it before helmet kicks in covers any pre-helmet path.
+app.disable('x-powered-by');
+
+// ==================== Security Middleware ====================
+// `securityHeaders()` is our project-wrapped Helmet (CSP, HSTS,
+// frame-ancestors, etc.). Configured per-environment internally.
+app.use(securityHeaders());
+app.use(cors(corsOptions));
+
+// ==================== Compression + Logging ====================
+app.use(compression());
+app.use(morgan('dev'));
 
 // ==================== Body Parsing ====================
-app.use(express.json({ limit: '10mb' })); // Parse JSON request bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
-app.use(cookieParser()); // Parse cookies (for refresh tokens)
-app.use(compression()); // Compress response bodies
+// Cookie parser must run before any handler that reads `req.cookies`
+// (refresh-token cookie on /api/auth routes).
+app.use(cookieParser());
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: URLENCODED_BODY_LIMIT,
+  })
+);
+
+// ==================== Input Sanitization ====================
+// Walks req.body / req.query / req.params, trimming whitespace,
+// escaping HTML entities, and stripping `$`-prefixed operator keys.
+// Routes that need to accept raw HTML (none today) can opt out via
+// `sanitize({ skipFields: ['richText'] })` mounted on that router.
+app.use(sanitize());
 
 // ==================== Health Check ====================
 // Mounted before the auth-protected routes so liveness probes don't need
@@ -67,6 +120,8 @@ app.use('/api', (req, res) => {
 });
 
 // ==================== Error Handling ====================
+// Body-parser size errors surface here as `entity.too.large` — the
+// errorHandler catches them and emits a structured 413.
 app.use(errorHandler);
 
 module.exports = app;
