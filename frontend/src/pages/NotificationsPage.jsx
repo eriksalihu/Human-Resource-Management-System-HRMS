@@ -9,6 +9,7 @@ import * as notificationApi from '../api/notificationApi';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useToast } from '../components/common/Toast';
+import { SafeText, sanitizeUrl } from '../utils/security';
 
 /** Filter tabs. */
 const FILTERS = [
@@ -434,13 +435,13 @@ const NotificationsPage = () => {
                       )}
                     </div>
                     {row.message && (
-                      <p
+                      <div
                         className={`mt-0.5 text-sm ${
                           isUnread ? 'text-gray-700' : 'text-gray-500'
-                        } whitespace-pre-line`}
+                        }`}
                       >
-                        {row.message}
-                      </p>
+                        <SafeText text={row.message} mode="preserve" />
+                      </div>
                     )}
                     <p
                       className="mt-1 text-xs text-gray-400"
@@ -492,7 +493,7 @@ const NotificationsPage = () => {
               <li key={row.id}>
                 {row.link ? (
                   <a
-                    href={row.link}
+                    href={sanitizeUrl(row.link)}
                     onClick={() => handleRowClick(row)}
                     className="block focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-lg"
                   >

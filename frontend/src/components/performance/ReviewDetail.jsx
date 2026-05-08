@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import * as performanceReviewApi from '../../api/performanceReviewApi';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { useToast } from '../common/Toast';
+import { SafeText } from '../../utils/security';
 
 /** Format an ISO-like date string as DD/MM/YYYY. */
 const formatDate = (value) => {
@@ -452,9 +453,9 @@ const Section = ({ title, text, accent = 'border-l-gray-300', empty }) => {
     >
       <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
       {trimmed ? (
-        <p className="mt-2 text-sm text-gray-700 whitespace-pre-line">
-          {trimmed}
-        </p>
+        <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">
+          <SafeText text={trimmed} mode="preserve" />
+        </div>
       ) : (
         <p className="mt-2 text-sm text-gray-400 italic">{empty}</p>
       )}
