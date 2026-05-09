@@ -18,7 +18,59 @@ const tokenService = require('../services/token.service');
 const jwtConfig = require('../config/jwt');
 const User = require('../models/User');
 const Role = require('../models/Role');
+const AuditLog = require('../models/AuditLog');
 const { AppError } = require('../middleware/errorHandler');
+
+/**
+ * Lockout policy. Five strikes locks the account for fifteen minutes;
+ * the counter resets on every successful login.
+ *
+ * These are deliberately not env vars — changing the policy at runtime
+ * would let a misconfigured deploy silently disable lockout entirely.
+ */
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+
+/**
+ * Best-effort audit log write. Wrapped so a failed audit insert never
+ * affects the credential-validation flow — the user-facing response
+ * stays the same whether or not the audit row landed.
+ */
+const auditFailedLogin = async ({ userId, email, ip, reason }) => {
+  try {
+    await AuditLog.create({
+      user_id: userId ?? null,
+      action: 'POST /api/auth/login [FAILED]',
+      entity: 'Users',
+      entity_id: userId ?? null,
+      old_values: null,
+      new_values: { email, reason },
+      ip_address: ip,
+    });
+  } catch (err) {
+    // Audit shouldn't break login; just log and move on.
+    // eslint-disable-next-line no-console
+    console.error('[auth.login] audit log failed:', err.message);
+  }
+};
+
+/**
+ * Format the locked-out error response. Includes the unlock timestamp
+ * so the frontend can render a "try again in X minutes" countdown.
+ */
+const lockoutError = (lockedUntil) => {
+  const minutes = Math.max(
+    1,
+    Math.ceil((new Date(lockedUntil).getTime() - Date.now()) / 60000)
+  );
+  const err = new AppError(
+    `Account locked due to too many failed login attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+    423 // Locked
+  );
+  err.code = 'ERR_ACCOUNT_LOCKED';
+  err.locked_until = lockedUntil;
+  return err;
+};
 
 /**
  * Build the refresh-token cookie options. Centralised here so login,
@@ -85,26 +137,92 @@ const register = async (req, res, next) => {
 
 /**
  * POST /api/auth/login
- * Authenticate credentials, set the refresh token in a hardened
- * httpOnly cookie, and return a fingerprint-bound access token in the
- * response body.
+ *
+ * Flow:
+ *   1. Pre-flight: check `locked_until`. If still in the lockout window,
+ *      reject with 423 Locked + an unlock timestamp.
+ *   2. Authenticate via authService.login. On failure, increment the
+ *      counter; on the 5th strike set `locked_until = now + 15 min`.
+ *      Audit each failed attempt for forensics.
+ *   3. On success, reset the counter, record `last_login_at` /
+ *      `last_login_ip`, and issue tokens as before.
+ *
+ * The 5-attempt window is deliberately small — for HR systems the
+ * brute-force exposure risk outweighs the usability cost.
  */
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    const ip = getClientIp(req);
 
     if (!email || !password) {
       throw new AppError('Email and password are required', 400);
     }
 
-    const user = await authService.login(email, password);
+    // (1) — Pre-flight lockout check. We look up the user explicitly
+    // here (auth service does the same lookup, but we need the lockout
+    // state BEFORE we compare passwords — comparing for a locked account
+    // would still give an attacker a timing oracle).
+    const existing = await User.findByEmail(email);
+    if (existing && typeof User.isLocked === 'function') {
+      const locked = await User.isLocked(existing.id);
+      if (locked.locked) {
+        await auditFailedLogin({
+          userId: existing.id,
+          email,
+          ip,
+          reason: 'attempted_during_lockout',
+        });
+        return next(lockoutError(locked.locked_until));
+      }
+    }
+
+    // (2) — Validate credentials.
+    let user;
+    try {
+      user = await authService.login(email, password);
+    } catch (err) {
+      // Bad credentials → increment the failed-attempts counter on the
+      // matching user row (if any). We deliberately don't reveal whether
+      // the email exists — the response stays the same.
+      if (existing && typeof User.incrementFailedAttempts === 'function') {
+        const result = await User.incrementFailedAttempts(existing.id, {
+          maxAttempts: MAX_FAILED_ATTEMPTS,
+          lockoutDurationMs: LOCKOUT_DURATION_MS,
+        });
+        await auditFailedLogin({
+          userId: existing.id,
+          email,
+          ip,
+          reason: 'bad_credentials',
+        });
+
+        if (result?.locked_until) {
+          return next(lockoutError(result.locked_until));
+        }
+      } else {
+        await auditFailedLogin({
+          userId: null,
+          email,
+          ip,
+          reason: 'unknown_user',
+        });
+      }
+      // Re-throw the original auth error (preserves 401).
+      return next(err);
+    }
+
+    // (3) — Success path: reset counter + record session metadata.
+    if (typeof User.recordSuccessfulLogin === 'function') {
+      await User.recordSuccessfulLogin(user.id, ip);
+    }
 
     // Bind the access token to the issuing client's UA + IP via fingerprint.
     // The auth middleware verifies this on subsequent requests so a stolen
     // bearer token can't be replayed from a different machine.
     const accessToken = tokenService.generateAccessToken(user, { req });
     const refreshToken = tokenService.generateRefreshToken();
-    await tokenService.saveRefreshToken(user.id, refreshToken, getClientIp(req));
+    await tokenService.saveRefreshToken(user.id, refreshToken, ip);
 
     res.cookie('refreshToken', refreshToken, refreshCookieOptions());
 
