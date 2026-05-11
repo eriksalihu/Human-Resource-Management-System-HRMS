@@ -515,6 +515,174 @@ const remove = async (req, res, next) => {
   }
 };
 
+/* ──────────────────────────────────────────────────────────────────── */
+/* Leave balance                                                         */
+/* ──────────────────────────────────────────────────────────────────── */
+
+/**
+ * Annual leave allowance (in days) by contract type. These are the
+ * project's HR-policy defaults; a future commit can move them into a
+ * config table or per-department override.
+ *
+ * `null` means "no cap" — used for sick / maternity / paternity where
+ * national law and individual cases vary too much for a simple ceiling.
+ */
+const LEAVE_ALLOWANCE_BY_CONTRACT = Object.freeze({
+  'full-time': {
+    annual: 20,
+    sick: null,
+    personal: 5,
+    maternity: null,
+    paternity: 7,
+    unpaid: null,
+  },
+  'part-time': {
+    annual: 10,
+    sick: null,
+    personal: 3,
+    maternity: null,
+    paternity: 5,
+    unpaid: null,
+  },
+  contract: {
+    annual: 15,
+    sick: null,
+    personal: 3,
+    maternity: null,
+    paternity: 5,
+    unpaid: null,
+  },
+  intern: {
+    annual: 5,
+    sick: null,
+    personal: 0,
+    maternity: null,
+    paternity: 0,
+    unpaid: null,
+  },
+});
+
+/** Default fallback when an employee has no recognised contract type. */
+const DEFAULT_ALLOWANCE = LEAVE_ALLOWANCE_BY_CONTRACT['full-time'];
+
+/**
+ * Compose the per-type balance breakdown for an employee. Pulls the
+ * raw used-days from the model and decorates it with the allowance and
+ * remaining-balance math the UI needs.
+ *
+ * @param {Object} employee - Employee row (must include `lloji_kontrates`)
+ * @param {number} year
+ * @returns {Promise<Array<{
+ *   lloji: string,
+ *   allowance: number|null,
+ *   days_used: number,
+ *   remaining: number|null,
+ *   used_pct: number|null,
+ *   request_count: number,
+ * }>>}
+ */
+const composeLeaveBalance = async (employee, year) => {
+  const usedRows = await LeaveRequest.getLeaveBalance(employee.id, year);
+  const usedByType = new Map();
+  for (const r of usedRows) {
+    usedByType.set(r.lloji, {
+      days_used: Number(r.days_used) || 0,
+      request_count: Number(r.request_count) || 0,
+    });
+  }
+
+  const allowance =
+    LEAVE_ALLOWANCE_BY_CONTRACT[employee.lloji_kontrates] || DEFAULT_ALLOWANCE;
+
+  return VALID_TYPES.map((lloji) => {
+    const used = usedByType.get(lloji)?.days_used || 0;
+    const requests = usedByType.get(lloji)?.request_count || 0;
+    const limit = allowance[lloji] ?? null;
+
+    return {
+      lloji,
+      allowance: limit,
+      days_used: used,
+      remaining: limit == null ? null : Math.max(0, limit - used),
+      used_pct: limit == null || limit === 0 ? null : +((used / limit) * 100).toFixed(1),
+      request_count: requests,
+    };
+  });
+};
+
+/**
+ * GET /api/leave-requests/balance/me
+ *
+ * Authenticated employee's leave balance for the current (or specified) year.
+ *
+ * @query {number} [year] - Defaults to current calendar year
+ */
+const getMyBalance = async (req, res, next) => {
+  try {
+    const employee = await getRequestingEmployee(req.user.id);
+    const year = req.query.year
+      ? parseInt(req.query.year, 10)
+      : new Date().getFullYear();
+
+    const balance = await composeLeaveBalance(employee, year);
+
+    res.json({
+      success: true,
+      data: {
+        employee_id: employee.id,
+        year,
+        contract_type: employee.lloji_kontrates,
+        balance,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/leave-requests/balance/:employeeId
+ *
+ * HR / Admin / Department-Manager lookup of any employee's leave
+ * balance. Authorization happens at the route layer; this handler trusts
+ * `req.user` was already gated by `authorize(['Admin','HR Manager',
+ * 'Department Manager'])`.
+ *
+ * @param {number} req.params.employeeId
+ * @query {number} [year]
+ */
+const getEmployeeBalance = async (req, res, next) => {
+  try {
+    const employeeId = parseInt(req.params.employeeId, 10);
+    if (Number.isNaN(employeeId)) {
+      throw new AppError('Invalid employeeId', 400);
+    }
+
+    const employee = await Employee.findById(employeeId);
+    if (!employee) {
+      throw new AppError('Employee not found', 404);
+    }
+
+    const year = req.query.year
+      ? parseInt(req.query.year, 10)
+      : new Date().getFullYear();
+
+    const balance = await composeLeaveBalance(employee, year);
+
+    res.json({
+      success: true,
+      data: {
+        employee_id: employee.id,
+        year,
+        contract_type: employee.lloji_kontrates,
+        balance,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAll,
   getById,
@@ -526,6 +694,9 @@ module.exports = {
   cancel,
   update,
   remove,
+  getMyBalance,
+  getEmployeeBalance,
   VALID_STATUSES,
   VALID_TYPES,
+  LEAVE_ALLOWANCE_BY_CONTRACT,
 };
