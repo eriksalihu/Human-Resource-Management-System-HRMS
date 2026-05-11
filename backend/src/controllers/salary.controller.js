@@ -396,6 +396,231 @@ const bulkCreate = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/salaries/generate
+ *
+ * Generate monthly payroll for every active employee in one shot. Used at
+ * month-end to seed the Salaries table without an HR manager having to
+ * type each base pay individually.
+ *
+ * Base-pay strategy (per employee):
+ *   - Default: midpoint of the employee's position's salary band
+ *     ((paga_min + paga_max) / 2). Falls back to paga_min, then 0 if the
+ *     position has no band set.
+ *   - `baseStrategy: 'min'` uses paga_min instead (handy for new-hires
+ *     month).
+ *   - `baseStrategy: 'max'` uses paga_max (rare but useful for back-pay).
+ *
+ * Optional `default_bonuse` and `default_zbritje` apply uniformly to
+ * every generated row. `dryRun: true` returns the preview without
+ * inserting anything — the SalaryList "Generate payroll" dialog uses this
+ * to show "X employees, Y already have salaries for this month" before
+ * the HR manager confirms.
+ *
+ * @body {number}  muaji
+ * @body {number}  viti
+ * @body {string}  [department_id] - Scope generation to a single dept
+ * @body {string}  [baseStrategy='mid'] - 'min' | 'mid' | 'max'
+ * @body {number}  [default_bonuse=0]
+ * @body {number}  [default_zbritje=0]
+ * @body {string}  [statusi='pending']
+ * @body {boolean} [dryRun=false]
+ */
+const generateMonthlyPayroll = async (req, res, next) => {
+  try {
+    const {
+      muaji,
+      viti,
+      department_id,
+      baseStrategy = 'mid',
+      default_bonuse = 0,
+      default_zbritje = 0,
+      statusi = 'pending',
+      dryRun = false,
+    } = req.body;
+
+    if (!muaji || !viti) {
+      throw new AppError('muaji and viti are required', 400);
+    }
+    const monthNum = parseInt(muaji, 10);
+    const yearNum = parseInt(viti, 10);
+    if (monthNum < 1 || monthNum > 12) {
+      throw new AppError('muaji must be between 1 and 12', 400);
+    }
+    if (!Number.isFinite(yearNum) || yearNum < 2000 || yearNum > 2100) {
+      throw new AppError('viti must be a sensible four-digit year', 400);
+    }
+    if (statusi && !VALID_STATUSES.includes(statusi)) {
+      throw new AppError(
+        `Invalid statusi. Must be one of: ${VALID_STATUSES.join(', ')}`,
+        400
+      );
+    }
+    if (!['min', 'mid', 'max'].includes(baseStrategy)) {
+      throw new AppError(
+        "baseStrategy must be 'min', 'mid', or 'max'",
+        400
+      );
+    }
+
+    const bonus = Number(default_bonuse) || 0;
+    const discretionary = Number(default_zbritje) || 0;
+
+    /**
+     * Pull every active employee + their position's salary band in one
+     * query. Department scope is optional.
+     */
+    const db = require('../config/db');
+    const conditions = ["e.statusi = 'active'"];
+    const params = [];
+    if (department_id) {
+      conditions.push('e.department_id = ?');
+      params.push(parseInt(department_id, 10));
+    }
+
+    const [employees] = await db.query(
+      `SELECT
+         e.id AS employee_id,
+         e.numri_punonjesit,
+         u.first_name, u.last_name,
+         e.department_id,
+         e.position_id,
+         p.emertimi  AS position_emertimi,
+         p.paga_min,
+         p.paga_max,
+         d.emertimi  AS department_emertimi
+       FROM Employees e
+       LEFT JOIN Users u        ON e.user_id = u.id
+       LEFT JOIN Positions p    ON e.position_id = p.id
+       LEFT JOIN Departments d  ON e.department_id = d.id
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY d.emertimi, u.last_name, u.first_name`,
+      params
+    );
+
+    /** Pull existing salary rows for the period in one query, indexed by employee_id. */
+    const [existingRows] = await db.query(
+      `SELECT employee_id
+       FROM Salaries
+       WHERE muaji = ? AND viti = ?`,
+      [monthNum, yearNum]
+    );
+    const existingEmployeeIds = new Set(existingRows.map((r) => r.employee_id));
+
+    /** Pick base pay from the position's band given the chosen strategy. */
+    const pickBase = (pMin, pMax) => {
+      const min = Number(pMin) || 0;
+      const max = Number(pMax) || 0;
+      if (baseStrategy === 'min') return min;
+      if (baseStrategy === 'max') return max || min;
+      // 'mid'
+      if (max > 0 && min > 0) return +((min + max) / 2).toFixed(2);
+      return min || max || 0;
+    };
+
+    /** Build the per-employee plan. */
+    const plan = [];
+    const skipped = [];
+
+    for (const emp of employees) {
+      if (existingEmployeeIds.has(emp.employee_id)) {
+        skipped.push({
+          employee_id: emp.employee_id,
+          name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+          reason: 'salary already exists for this period',
+        });
+        continue;
+      }
+
+      const base = pickBase(emp.paga_min, emp.paga_max);
+      if (base <= 0) {
+        skipped.push({
+          employee_id: emp.employee_id,
+          name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+          reason: 'position has no salary band',
+        });
+        continue;
+      }
+
+      const net = computeNetPay(base, bonus, discretionary);
+
+      plan.push({
+        employee_id: emp.employee_id,
+        numri_punonjesit: emp.numri_punonjesit,
+        name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim(),
+        department: emp.department_emertimi || null,
+        position: emp.position_emertimi || null,
+        paga_baze: base,
+        bonuse: bonus,
+        zbritje: discretionary,
+        paga_neto: net,
+      });
+    }
+
+    // Dry-run path — preview only, no inserts.
+    if (dryRun) {
+      return res.json({
+        success: true,
+        message: `Preview: ${plan.length} would be created, ${skipped.length} skipped`,
+        data: {
+          muaji: monthNum,
+          viti: yearNum,
+          baseStrategy,
+          dryRun: true,
+          plan,
+          skipped,
+        },
+      });
+    }
+
+    // Insert each planned row. We do these sequentially so a partial
+    // failure leaves a clear "stopped at row N" trail in the response.
+    const created = [];
+    for (const row of plan) {
+      try {
+        const salaryId = await Salary.create({
+          employee_id: row.employee_id,
+          paga_baze: row.paga_baze,
+          bonuse: row.bonuse,
+          zbritje: row.zbritje,
+          paga_neto: row.paga_neto,
+          muaji: monthNum,
+          viti: yearNum,
+          statusi,
+        });
+        created.push({
+          id: salaryId,
+          employee_id: row.employee_id,
+          name: row.name,
+          paga_neto: row.paga_neto,
+        });
+      } catch (err) {
+        // Most likely a duplicate-key race; surface and continue.
+        skipped.push({
+          employee_id: row.employee_id,
+          name: row.name,
+          reason: err.code === 'ER_DUP_ENTRY' ? 'duplicate period' : err.message,
+        });
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Payroll generation complete — ${created.length} created, ${skipped.length} skipped`,
+      data: {
+        muaji: monthNum,
+        viti: yearNum,
+        baseStrategy,
+        dryRun: false,
+        created,
+        skipped,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAll,
   getById,
@@ -405,4 +630,5 @@ module.exports = {
   update,
   remove,
   bulkCreate,
+  generateMonthlyPayroll,
 };
