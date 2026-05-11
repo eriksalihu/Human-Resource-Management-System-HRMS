@@ -7,8 +7,12 @@
 const Employee = require('../models/Employee');
 const Department = require('../models/Department');
 const Position = require('../models/Position');
+const db = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
-const { generateEmployeeNumber } = require('../utils/helpers');
+const {
+  generateEmployeeNumber,
+  buildPaginationQuery,
+} = require('../utils/helpers');
 
 /**
  * Valid contract-type values (must match the ENUM in the Employees table).
@@ -311,6 +315,200 @@ const remove = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/employees/search
+ *
+ * Advanced employee search. Supports everything `getAll` does, plus:
+ *   - Full-text search expanded to department + position names
+ *   - Hire-date range filter (from_date / to_date on data_punesimit)
+ *   - Multi-value contract type filter (`lloji_kontrates=full-time,intern`)
+ *   - Multi-value status filter (`statusi=active,suspended`)
+ *
+ * Implemented with direct SQL because the existing `Employee.findAll` is
+ * fixed at single-value filters. Mirrors the model's BASE_SELECT shape so
+ * the response is interchangeable with the standard listing endpoint.
+ *
+ * @query {string}  [search]            - Free-text term applied across name,
+ *                                        email, employee number, department name,
+ *                                        and position name (LIKE %term%)
+ * @query {number}  [department_id]     - Exact department match
+ * @query {number}  [position_id]       - Exact position match
+ * @query {string}  [statusi]           - Comma-separated list of statuses
+ * @query {string}  [lloji_kontrates]   - Comma-separated list of contract types
+ * @query {string}  [from_date]         - Hire date >= this (YYYY-MM-DD)
+ * @query {string}  [to_date]           - Hire date <= this (YYYY-MM-DD)
+ * @query {number}  [menaxheri_id]      - Manager filter
+ * @query {number}  [page=1]
+ * @query {number}  [limit=10]
+ * @query {string}  [sortBy='id']
+ * @query {string}  [sortOrder='ASC']
+ */
+const advancedSearch = async (req, res, next) => {
+  try {
+    const {
+      search = '',
+      department_id,
+      position_id,
+      statusi,
+      lloji_kontrates,
+      from_date,
+      to_date,
+      menaxheri_id,
+      page = 1,
+      limit = 10,
+      sortBy = 'id',
+      sortOrder = 'ASC',
+    } = req.query;
+
+    /** Allowed sort columns (whitelist against SQL injection). */
+    const ALLOWED_SORT = [
+      'id',
+      'numri_punonjesit',
+      'data_punesimit',
+      'lloji_kontrates',
+      'statusi',
+      'created_at',
+    ];
+
+    /** Allow only known statuses / contract types — silently drop anything else. */
+    const splitAndFilter = (csv, validSet) =>
+      String(csv || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s && validSet.includes(s));
+
+    const statusValues = splitAndFilter(statusi, VALID_STATUSES);
+    const contractValues = splitAndFilter(lloji_kontrates, VALID_CONTRACT_TYPES);
+
+    /** Build WHERE clauses incrementally. */
+    const conditions = [];
+    const params = [];
+
+    if (search) {
+      // Full-text-ish search across the user-visible identity fields.
+      conditions.push(
+        `(u.first_name LIKE ?
+          OR u.last_name LIKE ?
+          OR u.email LIKE ?
+          OR e.numri_punonjesit LIKE ?
+          OR d.emertimi LIKE ?
+          OR p.emertimi LIKE ?)`
+      );
+      const like = `%${search}%`;
+      params.push(like, like, like, like, like, like);
+    }
+
+    if (department_id) {
+      conditions.push('e.department_id = ?');
+      params.push(parseInt(department_id, 10));
+    }
+    if (position_id) {
+      conditions.push('e.position_id = ?');
+      params.push(parseInt(position_id, 10));
+    }
+    if (menaxheri_id) {
+      conditions.push('e.menaxheri_id = ?');
+      params.push(parseInt(menaxheri_id, 10));
+    }
+
+    if (statusValues.length > 0) {
+      conditions.push(
+        `e.statusi IN (${statusValues.map(() => '?').join(', ')})`
+      );
+      params.push(...statusValues);
+    }
+
+    if (contractValues.length > 0) {
+      conditions.push(
+        `e.lloji_kontrates IN (${contractValues.map(() => '?').join(', ')})`
+      );
+      params.push(...contractValues);
+    }
+
+    if (from_date) {
+      conditions.push('e.data_punesimit >= ?');
+      params.push(from_date);
+    }
+    if (to_date) {
+      conditions.push('e.data_punesimit <= ?');
+      params.push(to_date);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    /** Count total matching rows (mirrors the model's count query). */
+    const [countRows] = await db.query(
+      `SELECT COUNT(*) AS total
+       FROM Employees e
+       LEFT JOIN Users u        ON e.user_id = u.id
+       LEFT JOIN Positions p    ON e.position_id = p.id
+       LEFT JOIN Departments d  ON e.department_id = d.id
+       ${where}`,
+      params
+    );
+    const total = Number(countRows[0]?.total) || 0;
+
+    const {
+      limit: perPage,
+      offset,
+      pagination,
+    } = buildPaginationQuery({
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+      total,
+    });
+
+    const safeSortBy = ALLOWED_SORT.includes(sortBy) ? sortBy : 'id';
+    const safeSortOrder =
+      String(sortOrder).toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+
+    /** Page of results — joined to mirror the Employee model's BASE_SELECT. */
+    const [rows] = await db.query(
+      `SELECT
+         e.id, e.user_id, e.position_id, e.department_id,
+         e.numri_punonjesit, e.data_punesimit, e.lloji_kontrates,
+         e.statusi, e.menaxheri_id, e.created_at, e.updated_at,
+         u.first_name, u.last_name, u.email, u.phone, u.profile_image,
+         u.is_active AS user_is_active,
+         p.emertimi  AS position_emertimi,
+         p.niveli    AS position_niveli,
+         d.emertimi  AS department_emertimi,
+         d.lokacioni AS department_lokacioni,
+         mgr_u.first_name AS menaxheri_first_name,
+         mgr_u.last_name  AS menaxheri_last_name,
+         mgr.numri_punonjesit AS menaxheri_numri
+       FROM Employees e
+       LEFT JOIN Users u        ON e.user_id = u.id
+       LEFT JOIN Positions p    ON e.position_id = p.id
+       LEFT JOIN Departments d  ON e.department_id = d.id
+       LEFT JOIN Employees mgr  ON e.menaxheri_id = mgr.id
+       LEFT JOIN Users mgr_u    ON mgr.user_id = mgr_u.id
+       ${where}
+       ORDER BY e.${safeSortBy} ${safeSortOrder}
+       LIMIT ? OFFSET ?`,
+      [...params, perPage, offset]
+    );
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination,
+      filters_applied: {
+        search: search || null,
+        department_id: department_id ? parseInt(department_id, 10) : null,
+        position_id: position_id ? parseInt(position_id, 10) : null,
+        statusi: statusValues,
+        lloji_kontrates: contractValues,
+        from_date: from_date || null,
+        to_date: to_date || null,
+        menaxheri_id: menaxheri_id ? parseInt(menaxheri_id, 10) : null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAll,
   getById,
@@ -319,4 +517,5 @@ module.exports = {
   create,
   update,
   remove,
+  advancedSearch,
 };
