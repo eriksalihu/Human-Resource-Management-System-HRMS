@@ -6,6 +6,7 @@
 
 const Attendance = require('../models/Attendance');
 const Employee = require('../models/Employee');
+const db = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 /** Roles permitted to view/manage any employee's attendance. */
@@ -389,12 +390,187 @@ const remove = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/attendances/report/department
+ *
+ * Department-level attendance report aggregated over a date range. For
+ * each department, returns total counts per status, attendance rate
+ * (present + remote as % of total entries), and average hours worked
+ * per day-row.
+ *
+ * Either default response (JSON) or CSV (via `?format=csv`) so HR can
+ * pull a spreadsheet for monthly reviews. The CSV path sets
+ * `Content-Disposition: attachment` so the browser downloads it.
+ *
+ * @query {string} from_date - Required. YYYY-MM-DD inclusive lower bound
+ * @query {string} to_date   - Required. YYYY-MM-DD inclusive upper bound
+ * @query {number} [department_id] - Scope to a single department
+ * @query {string} [format='json'] - 'json' or 'csv'
+ */
+const getDepartmentAttendanceReport = async (req, res, next) => {
+  try {
+    const { from_date, to_date, department_id, format = 'json' } = req.query;
+
+    if (!from_date || !to_date) {
+      throw new AppError(
+        'from_date and to_date query params are required',
+        400
+      );
+    }
+    if (!isValidDate(from_date) || !isValidDate(to_date)) {
+      throw new AppError(
+        'from_date and to_date must be valid YYYY-MM-DD dates',
+        400
+      );
+    }
+    if (from_date > to_date) {
+      throw new AppError('from_date must be on or before to_date', 400);
+    }
+    if (format !== 'json' && format !== 'csv') {
+      throw new AppError("format must be 'json' or 'csv'", 400);
+    }
+
+    const params = [from_date, to_date];
+    const deptFilter = department_id
+      ? 'AND e.department_id = ?'
+      : '';
+    if (department_id) params.push(parseInt(department_id, 10));
+
+    /**
+     * Per-department aggregate: counts per status + total entries +
+     * average hours worked across the period.
+     *
+     * `hours_worked` mirrors the formula used in the Attendance model's
+     * BASE_SELECT: TIMESTAMPDIFF(MINUTE, in, out) / 60. We compute it
+     * inline because the column is a derived expression, not stored.
+     */
+    const [rows] = await db.query(
+      `SELECT
+         d.id   AS department_id,
+         d.emertimi,
+         COUNT(a.id) AS total_entries,
+         SUM(CASE WHEN a.statusi = 'present'   THEN 1 ELSE 0 END) AS present,
+         SUM(CASE WHEN a.statusi = 'absent'    THEN 1 ELSE 0 END) AS absent,
+         SUM(CASE WHEN a.statusi = 'late'      THEN 1 ELSE 0 END) AS late_count,
+         SUM(CASE WHEN a.statusi = 'half-day'  THEN 1 ELSE 0 END) AS half_day,
+         SUM(CASE WHEN a.statusi = 'remote'    THEN 1 ELSE 0 END) AS remote,
+         COUNT(DISTINCT a.employee_id) AS employees_with_records,
+         COALESCE(AVG(
+           CASE
+             WHEN a.ora_hyrjes IS NOT NULL AND a.ora_daljes IS NOT NULL
+             THEN TIMESTAMPDIFF(
+                    MINUTE,
+                    CONCAT(a.data, ' ', a.ora_hyrjes),
+                    CONCAT(a.data, ' ', a.ora_daljes)
+                  ) / 60.0
+             ELSE NULL
+           END
+         ), 0) AS avg_hours_worked
+       FROM Departments d
+       LEFT JOIN Employees e ON e.department_id = d.id
+       LEFT JOIN Attendances a
+              ON a.employee_id = e.id
+             AND a.data BETWEEN ? AND ?
+       WHERE 1=1 ${deptFilter}
+       GROUP BY d.id, d.emertimi
+       ORDER BY d.emertimi ASC`,
+      params
+    );
+
+    // Decorate each row with derived metrics.
+    const report = rows.map((r) => {
+      const total = Number(r.total_entries) || 0;
+      const present = Number(r.present) || 0;
+      const remote = Number(r.remote) || 0;
+      const lateC = Number(r.late_count) || 0;
+      const absent = Number(r.absent) || 0;
+      const halfDay = Number(r.half_day) || 0;
+
+      // "Showed up" = present + remote (working from somewhere). Late
+      // and half-day are partial attendance; counted toward the rate at
+      // 0.5 weight so a half day registers as half a successful day.
+      const weightedAttendance = present + remote + (lateC + halfDay) * 0.5;
+      const attendance_rate =
+        total > 0 ? +((weightedAttendance / total) * 100).toFixed(1) : 0;
+
+      return {
+        department_id: r.department_id,
+        emertimi: r.emertimi,
+        total_entries: total,
+        present,
+        absent,
+        late: lateC,
+        half_day: halfDay,
+        remote,
+        employees_with_records: Number(r.employees_with_records) || 0,
+        avg_hours_worked: +Number(r.avg_hours_worked || 0).toFixed(2),
+        attendance_rate,
+      };
+    });
+
+    if (format === 'csv') {
+      // Build a tidy CSV. Quote department names defensively in case of
+      // commas. Everything else is numeric / safe.
+      const header = [
+        'Department',
+        'Total entries',
+        'Present',
+        'Absent',
+        'Late',
+        'Half day',
+        'Remote',
+        'Employees with records',
+        'Avg hours worked',
+        'Attendance rate (%)',
+      ];
+
+      const rowsCsv = report.map((r) => [
+        `"${(r.emertimi || '').replace(/"/g, '""')}"`,
+        r.total_entries,
+        r.present,
+        r.absent,
+        r.late,
+        r.half_day,
+        r.remote,
+        r.employees_with_records,
+        r.avg_hours_worked,
+        r.attendance_rate,
+      ]);
+
+      const csv = [header, ...rowsCsv]
+        .map((cols) => cols.join(','))
+        .join('\n');
+
+      const stamp = `${from_date}_to_${to_date}`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="attendance_report_${stamp}.csv"`
+      );
+      return res.send(csv);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        from_date,
+        to_date,
+        department_id: department_id ? parseInt(department_id, 10) : null,
+        departments: report,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAll,
   getById,
   getMyAttendance,
   getDepartmentAttendance,
   getMonthlyReport,
+  getDepartmentAttendanceReport,
   create,
   checkIn,
   checkOut,
