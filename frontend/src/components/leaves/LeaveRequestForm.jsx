@@ -7,6 +7,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import * as leaveRequestApi from '../../api/leaveRequestApi';
 import * as employeeApi from '../../api/employeeApi';
+import axiosInstance from '../../api/axiosInstance';
 import useAuth from '../../hooks/useAuth';
 
 /** Leave type options (values must match LeaveRequests.lloji enum). */
@@ -102,6 +103,14 @@ const LeaveRequestForm = ({
   const [errors, setErrors] = useState({});
   const [employees, setEmployees] = useState([]);
   const [existingRequests, setExistingRequests] = useState([]);
+  /**
+   * Leave balance for the request's subject (self or HR-picked).
+   * Shape mirrors the server payload from `/leave-requests/balance/*`:
+   *   { employee_id, year, contract_type, balance: [{ lloji, allowance,
+   *     days_used, remaining, used_pct, request_count }, …] }
+   */
+  const [balanceData, setBalanceData] = useState(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
 
   /**
    * Load employees for the HR/Admin employee-picker (only if privileged and
@@ -148,6 +157,77 @@ const LeaveRequestForm = ({
       cancelled = true;
     };
   }, []);
+
+  /**
+   * Fetch the subject employee's leave balance:
+   *   - Self-service (no employee_id): hit /balance/me
+   *   - HR filing for someone else: hit /balance/:employeeId (commit 217)
+   *   - Edit mode: use the initialData.employee_id since it's locked
+   *
+   * Refetches whenever the resolved subject changes. Silent on failure —
+   * the panel just hides and the form stays usable.
+   */
+  useEffect(() => {
+    const subjectId = isEdit
+      ? initialData?.employee_id
+      : form.employee_id || null;
+
+    let cancelled = false;
+    const load = async () => {
+      setBalanceLoading(true);
+      try {
+        const url = subjectId
+          ? `/leave-requests/balance/${subjectId}`
+          : '/leave-requests/balance/me';
+        const { data } = await axiosInstance.get(url);
+        if (!cancelled) setBalanceData(data?.data || null);
+      } catch {
+        // HR picking someone else may 403 if the route guard rejects;
+        // self-service path may 404 on a user with no employee record.
+        // Either way we just hide the panel.
+        if (!cancelled) setBalanceData(null);
+      } finally {
+        if (!cancelled) setBalanceLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, initialData?.employee_id, form.employee_id]);
+
+  /**
+   * Selected type's balance row. Null when balance hasn't loaded yet or
+   * the server's response didn't include the chosen type (shouldn't
+   * happen — the controller always returns all 6 types).
+   */
+  const selectedBalance = useMemo(() => {
+    if (!balanceData?.balance) return null;
+    return balanceData.balance.find((r) => r.lloji === form.lloji) || null;
+  }, [balanceData, form.lloji]);
+
+  /**
+   * Does the requested business-day count exceed the subject's remaining
+   * balance for the chosen type? `allowance === null` (uncapped types
+   * like sick / maternity) always passes; pending dates (no business
+   * days computed yet) also pass.
+   */
+  const balanceWarning = useMemo(() => {
+    if (!selectedBalance) return null;
+    if (selectedBalance.remaining == null) return null; // uncapped
+    if (!form.data_fillimit || !form.data_perfundimit) return null;
+
+    // Compute requested business days INLINE so this re-runs on date change.
+    const requested = businessDays(form.data_fillimit, form.data_perfundimit);
+    if (requested <= 0) return null;
+    if (requested <= selectedBalance.remaining) return null;
+
+    return {
+      requested,
+      remaining: selectedBalance.remaining,
+      shortfall: requested - selectedBalance.remaining,
+    };
+  }, [selectedBalance, form.data_fillimit, form.data_perfundimit]);
 
   /** Controlled input change handler. */
   const handleChange = (field) => (event) => {
@@ -320,6 +400,100 @@ const LeaveRequestForm = ({
           <p className="mt-1 text-xs text-red-600">{errors.lloji}</p>
         )}
       </div>
+
+      {/* Leave balance panel (commit 220) */}
+      {balanceData?.balance && (
+        <div className="rounded-md bg-gray-50 border border-gray-200 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+              Your {balanceData.year} leave balance
+              {balanceData.contract_type && (
+                <span className="ml-1 text-gray-400 normal-case font-normal">
+                  ({balanceData.contract_type})
+                </span>
+              )}
+            </p>
+            {balanceLoading && (
+              <span className="text-[10px] text-gray-400">refreshing…</span>
+            )}
+          </div>
+
+          <ul className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+            {balanceData.balance.map((row) => {
+              const isSelected = row.lloji === form.lloji;
+              const uncapped = row.allowance == null;
+              return (
+                <li
+                  key={row.lloji}
+                  className={`rounded px-2 py-1.5 ring-1 ring-inset transition-colors ${
+                    isSelected
+                      ? 'bg-indigo-50 ring-indigo-300'
+                      : 'bg-white ring-gray-200'
+                  }`}
+                >
+                  <p
+                    className={`capitalize font-medium ${
+                      isSelected ? 'text-indigo-800' : 'text-gray-700'
+                    }`}
+                  >
+                    {row.lloji}
+                  </p>
+                  <p className="text-[11px] text-gray-600 mt-0.5">
+                    {uncapped ? (
+                      <span>
+                        <span className="font-semibold">{row.days_used}</span> used
+                        <span className="text-gray-400"> · no cap</span>
+                      </span>
+                    ) : (
+                      <span>
+                        <span className="font-semibold">{row.remaining}</span>{' '}
+                        / {row.allowance} left
+                      </span>
+                    )}
+                  </p>
+                  {!uncapped && row.allowance > 0 && (
+                    <div className="mt-1 h-1 w-full rounded-full bg-gray-100 overflow-hidden">
+                      <div
+                        className={`h-1 rounded-full ${
+                          row.used_pct >= 100
+                            ? 'bg-rose-500'
+                            : row.used_pct >= 80
+                              ? 'bg-amber-500'
+                              : 'bg-emerald-500'
+                        }`}
+                        style={{
+                          width: `${Math.min(100, row.used_pct || 0)}%`,
+                        }}
+                      />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* Balance-exceeded warning */}
+      {balanceWarning && (
+        <div
+          role="alert"
+          className="rounded-md bg-rose-50 border border-rose-200 p-3 text-sm text-rose-900"
+        >
+          <p className="font-semibold">Balance warning</p>
+          <p className="mt-1">
+            You're requesting{' '}
+            <span className="font-semibold">{balanceWarning.requested}</span>{' '}
+            business days but only{' '}
+            <span className="font-semibold">{balanceWarning.remaining}</span>{' '}
+            day{balanceWarning.remaining === 1 ? '' : 's'} remain in your{' '}
+            <span className="capitalize font-medium">{form.lloji}</span>{' '}
+            balance for {balanceData?.year}. Shortfall:{' '}
+            <span className="font-semibold">{balanceWarning.shortfall}</span>{' '}
+            day{balanceWarning.shortfall === 1 ? '' : 's'}.
+          </p>
+        </div>
+      )}
 
       {/* Date range */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
