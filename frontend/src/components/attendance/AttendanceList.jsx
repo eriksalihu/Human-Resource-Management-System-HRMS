@@ -4,7 +4,7 @@
  * @author Dev B
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as attendanceApi from '../../api/attendanceApi';
 import * as employeeApi from '../../api/employeeApi';
 import DataTable from '../common/DataTable';
@@ -368,6 +368,54 @@ const AttendanceList = ({
     _rowClassName: ROW_HIGHLIGHT_CLASS[row.statusi] || '',
   }));
 
+  /**
+   * Summary statistics derived from the currently-loaded page of rows.
+   *
+   * Important caveat: this only summarises the **visible page**, not the
+   * full server-side result set. For pages 1..N, totals will be partial.
+   * The header note ("on this page") makes that clear so HR doesn't
+   * mistake page totals for the whole filter window. A future commit
+   * could add a `/api/attendances/summary` endpoint that returns
+   * server-side totals across the whole filter — for now this delivers
+   * the spec's value (at-a-glance counts) without needing new plumbing.
+   */
+  const summary = useMemo(() => {
+    const counts = {
+      present: 0,
+      absent: 0,
+      late: 0,
+      'half-day': 0,
+      remote: 0,
+    };
+    let totalHours = 0;
+    let rowsWithHours = 0;
+
+    for (const row of rows) {
+      if (counts[row.statusi] != null) counts[row.statusi] += 1;
+      const h = Number(row.hours_worked);
+      if (Number.isFinite(h) && h > 0) {
+        totalHours += h;
+        rowsWithHours += 1;
+      }
+    }
+
+    const total = rows.length;
+    // Attendance rate weighs late + half-day at 0.5 (mirrors the backend
+    // dept-report formula from commit 222) so partial attendance still
+    // contributes proportionally.
+    const weighted =
+      counts.present + counts.remote + (counts.late + counts['half-day']) * 0.5;
+    const rate = total > 0 ? +((weighted / total) * 100).toFixed(1) : 0;
+    const avgHours = rowsWithHours > 0 ? +(totalHours / rowsWithHours).toFixed(2) : 0;
+
+    return {
+      total,
+      ...counts,
+      attendance_rate: rate,
+      avg_hours_worked: avgHours,
+    };
+  }, [rows]);
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -453,6 +501,67 @@ const AttendanceList = ({
         </div>
       )}
 
+      {/* Summary stats (commit 221). Hidden while loading first page or
+          when there are zero rows — empty totals would be misleading. */}
+      {!loading && summary.total > 0 && (
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Summary
+            </p>
+            <p className="text-[10px] text-gray-400">
+              {summary.total} record{summary.total === 1 ? '' : 's'} on this page
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            <SummaryStat
+              label="Present"
+              value={summary.present}
+              tone="emerald"
+            />
+            <SummaryStat label="Remote" value={summary.remote} tone="sky" />
+            <SummaryStat label="Late" value={summary.late} tone="amber" />
+            <SummaryStat
+              label="Half day"
+              value={summary['half-day']}
+              tone="orange"
+            />
+            <SummaryStat label="Absent" value={summary.absent} tone="rose" />
+            <SummaryStat
+              label="Avg hours"
+              value={
+                summary.avg_hours_worked > 0
+                  ? `${summary.avg_hours_worked}h`
+                  : '—'
+              }
+              tone="indigo"
+            />
+          </div>
+
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs text-gray-500">Attendance rate:</span>
+            <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden max-w-xs">
+              <div
+                className={`h-2 rounded-full transition-all ${
+                  summary.attendance_rate >= 85
+                    ? 'bg-emerald-500'
+                    : summary.attendance_rate >= 60
+                      ? 'bg-amber-500'
+                      : 'bg-rose-500'
+                }`}
+                style={{
+                  width: `${Math.max(0, Math.min(100, summary.attendance_rate))}%`,
+                }}
+              />
+            </div>
+            <span className="text-xs font-semibold text-gray-900 tabular-nums">
+              {summary.attendance_rate}%
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <DataTable
         columns={columns}
@@ -496,6 +605,33 @@ const AttendanceList = ({
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteTarget(null)}
       />
+    </div>
+  );
+};
+
+/**
+ * SummaryStat — small labelled tile used in the summary row.
+ * Plain function component; no state of its own.
+ */
+const SummaryStat = ({ label, value, tone = 'gray' }) => {
+  const toneClass = {
+    emerald: 'text-emerald-700',
+    sky: 'text-sky-700',
+    amber: 'text-amber-700',
+    orange: 'text-orange-700',
+    rose: 'text-rose-700',
+    indigo: 'text-indigo-700',
+    gray: 'text-gray-700',
+  }[tone];
+
+  return (
+    <div className="text-center">
+      <p className="text-[10px] uppercase tracking-wide text-gray-500">
+        {label}
+      </p>
+      <p className={`mt-0.5 text-lg font-bold tabular-nums ${toneClass}`}>
+        {value}
+      </p>
     </div>
   );
 };
