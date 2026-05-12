@@ -70,12 +70,53 @@ const getCharts = async (req, res, next) => {
       );
     }
 
-    const [byDepartment, attendanceTrend, leaveDistribution] =
-      await Promise.all([
-        dashboardService.getEmployeesByDepartment(),
-        dashboardService.getAttendanceTrend({ days: trendDays }),
-        dashboardService.getLeaveDistribution({ days: leaveDays }),
-      ]);
+    // Optional new windows; defaults keep the response payload small.
+    const salaryMonths = req.query.salary_months
+      ? parseInt(req.query.salary_months, 10)
+      : 6;
+    const performanceDays = req.query.performance_days
+      ? parseInt(req.query.performance_days, 10)
+      : 365;
+
+    if (Number.isNaN(salaryMonths) || salaryMonths < 1 || salaryMonths > 24) {
+      throw new AppError(
+        'salary_months must be an integer between 1 and 24',
+        400
+      );
+    }
+    if (
+      Number.isNaN(performanceDays) ||
+      performanceDays < 1 ||
+      performanceDays > 365 * 5
+    ) {
+      throw new AppError(
+        'performance_days must be an integer between 1 and 1825 (5 years)',
+        400
+      );
+    }
+
+    // Fan out every chart query in parallel — they're all read-only and
+    // independent. The slowest determines latency; the dashboard never
+    // waits for a sequential round-trip.
+    const [
+      byDepartment,
+      attendanceTrend,
+      leaveDistribution,
+      salaryTrend,
+      leaveBalance,
+      trainingCompletion,
+      performanceByDept,
+    ] = await Promise.all([
+      dashboardService.getEmployeesByDepartment(),
+      dashboardService.getAttendanceTrend({ days: trendDays }),
+      dashboardService.getLeaveDistribution({ days: leaveDays }),
+      dashboardService.getSalaryTrend({ months: salaryMonths }),
+      dashboardService.getLeaveBalanceOverview(),
+      dashboardService.getTrainingCompletionRate({ limit: 10 }),
+      dashboardService.getPerformanceAverageByDepartment({
+        days: performanceDays,
+      }),
+    ]);
 
     res.json({
       success: true,
@@ -88,6 +129,17 @@ const getCharts = async (req, res, next) => {
         leave_distribution: {
           window_days: leaveDays,
           series: leaveDistribution,
+        },
+        // Advanced widgets (commit 218)
+        salary_trend: {
+          window_months: salaryMonths,
+          series: salaryTrend,
+        },
+        leave_balance: leaveBalance,
+        training_completion: trainingCompletion,
+        performance_by_department: {
+          window_days: performanceDays,
+          series: performanceByDept,
         },
       },
     });
