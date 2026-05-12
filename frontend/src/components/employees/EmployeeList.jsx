@@ -1,12 +1,21 @@
 /**
  * @file frontend/src/components/employees/EmployeeList.jsx
  * @description Employee listing with search, multi-filter (department/status/contract), avatar column, and CRUD actions
+ *
+ *   v2 (commit 215): adds an expandable "Advanced filters" panel with
+ *   hire-date range pickers, multi-select contract / status, an
+ *   active-filter count badge, and a one-click clear. When ANY advanced
+ *   filter is engaged the list switches to the `/api/employees/search`
+ *   endpoint (introduced in commit 213); otherwise it stays on the
+ *   simpler `/api/employees` listing.
+ *
  * @author Dev B
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as employeeApi from '../../api/employeeApi';
 import * as departmentApi from '../../api/departmentApi';
+import axiosInstance from '../../api/axiosInstance';
 import DataTable from '../common/DataTable';
 import Pagination from '../common/Pagination';
 import SearchBar from '../common/SearchBar';
@@ -95,6 +104,17 @@ const EmployeeList = ({ onAdd, onEdit, onView }) => {
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  // ─── Advanced-filter panel state ───────────────────────────────────
+  // `advancedOpen` controls visibility of the expanded section. Closed by
+  // default so the list looks unchanged for users who don't need it.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  // Multi-value: held as Sets for cheap toggle / has-checks. Sent to the
+  // server as comma-joined strings on the wire.
+  const [statusSet, setStatusSet] = useState(() => new Set());
+  const [contractSet, setContractSet] = useState(() => new Set());
 
   const { addToast } = useToast();
 
@@ -233,29 +253,113 @@ const EmployeeList = ({ onAdd, onEdit, onView }) => {
   }, []);
 
   /**
+   * True when any advanced filter is engaged. Drives endpoint selection
+   * AND the "active filter count" badge on the toggle button.
+   */
+  const advancedActive = useMemo(
+    () => Boolean(fromDate || toDate || statusSet.size > 0 || contractSet.size > 0),
+    [fromDate, toDate, statusSet, contractSet]
+  );
+
+  /**
+   * Active filter count — shown on the panel header so users can tell
+   * at a glance how restrictive their current query is. Top-bar filters
+   * count too because they're equally part of the active query.
+   */
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    if (search) n += 1;
+    if (departmentId) n += 1;
+    if (statusi) n += 1;
+    if (contractType) n += 1;
+    if (fromDate) n += 1;
+    if (toDate) n += 1;
+    n += statusSet.size;
+    n += contractSet.size;
+    return n;
+  }, [search, departmentId, statusi, contractType, fromDate, toDate, statusSet, contractSet]);
+
+  /**
    * Fetch employees with current filter / sort / paging state.
+   *
+   * - When the advanced panel is engaged (date range or multi-select),
+   *   we hit `/api/employees/search` (commit 213) directly via axios
+   *   since `employeeApi.getAll` is single-value only.
+   * - Otherwise we keep using the existing `getAll` for backwards
+   *   compatibility and the slightly leaner endpoint contract.
    */
   const fetchEmployees = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await employeeApi.getAll({
-        page,
-        limit,
-        search,
-        department_id: departmentId || undefined,
-        statusi: statusi || undefined,
-        lloji_kontrates: contractType || undefined,
-        sortBy,
-        sortOrder,
-      });
-      setEmployees(result.data);
-      setPagination(result.pagination);
+      if (advancedActive) {
+        // Build the advanced query. Multi-value filters go on the wire as
+        // comma-separated strings (matches the controller's
+        // `splitAndFilter` parser).
+        const params = {
+          page,
+          limit,
+          sortBy,
+          sortOrder,
+          ...(search ? { search } : {}),
+          ...(departmentId ? { department_id: departmentId } : {}),
+          ...(fromDate ? { from_date: fromDate } : {}),
+          ...(toDate ? { to_date: toDate } : {}),
+        };
+        // Top-bar single + advanced multi merge: a single-value pick
+        // counts as a single-value member of the multi-set so the server
+        // sees a consistent list.
+        const statusList = new Set(statusSet);
+        if (statusi) statusList.add(statusi);
+        if (statusList.size > 0) {
+          params.statusi = Array.from(statusList).join(',');
+        }
+        const contractList = new Set(contractSet);
+        if (contractType) contractList.add(contractType);
+        if (contractList.size > 0) {
+          params.lloji_kontrates = Array.from(contractList).join(',');
+        }
+
+        const { data } = await axiosInstance.get('/employees/search', { params });
+        setEmployees(data.data || []);
+        setPagination(data.pagination || {});
+      } else {
+        const result = await employeeApi.getAll({
+          page,
+          limit,
+          search,
+          department_id: departmentId || undefined,
+          statusi: statusi || undefined,
+          lloji_kontrates: contractType || undefined,
+          sortBy,
+          sortOrder,
+        });
+        setEmployees(result.data);
+        setPagination(result.pagination);
+      }
     } catch (err) {
-      addToast('Failed to load employees', 'error');
+      addToast(
+        err.response?.data?.message || 'Failed to load employees',
+        'error'
+      );
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, departmentId, statusi, contractType, sortBy, sortOrder, addToast]);
+  }, [
+    advancedActive,
+    page,
+    limit,
+    search,
+    departmentId,
+    statusi,
+    contractType,
+    fromDate,
+    toDate,
+    statusSet,
+    contractSet,
+    sortBy,
+    sortOrder,
+    addToast,
+  ]);
 
   useEffect(() => {
     fetchEmployees();
@@ -291,14 +395,31 @@ const EmployeeList = ({ onAdd, onEdit, onView }) => {
     setPage(1);
   };
 
-  /** Reset all filters in one click. */
+  /** Reset all filters (basic + advanced) in one click. */
   const handleClearFilters = () => {
     setSearch('');
     setDepartmentId('');
     setStatusi('');
     setContractType('');
+    setFromDate('');
+    setToDate('');
+    setStatusSet(new Set());
+    setContractSet(new Set());
     setPage(1);
   };
+
+  /** Toggle a value in a Set-shaped state. Bumps page back to 1. */
+  const toggleInSet = (setter) => (value) => {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+    setPage(1);
+  };
+  const toggleStatus = toggleInSet(setStatusSet);
+  const toggleContract = toggleInSet(setContractSet);
 
   /**
    * Confirm and execute employee termination.
@@ -328,7 +449,16 @@ const EmployeeList = ({ onAdd, onEdit, onView }) => {
     label: d.emertimi,
   }));
 
-  const hasActiveFilters = Boolean(search || departmentId || statusi || contractType);
+  const hasActiveFilters = Boolean(
+    search ||
+      departmentId ||
+      statusi ||
+      contractType ||
+      fromDate ||
+      toDate ||
+      statusSet.size > 0 ||
+      contractSet.size > 0
+  );
 
   return (
     <div className="space-y-4">
@@ -381,14 +511,199 @@ const EmployeeList = ({ onAdd, onEdit, onView }) => {
         />
       </div>
 
-      {hasActiveFilters && (
-        <div className="flex justify-end">
+      {/* Advanced-filters toggle */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((v) => !v)}
+          aria-expanded={advancedOpen}
+          aria-controls="advanced-filters-panel"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-gray-900"
+        >
+          <svg
+            className={`h-4 w-4 transition-transform ${
+              advancedOpen ? 'rotate-180' : ''
+            }`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M19 9l-7 7-7-7"
+            />
+          </svg>
+          Advanced filters
+          {activeFilterCount > 0 && (
+            <span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-indigo-100 text-indigo-700">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+
+        {hasActiveFilters && (
           <button
             onClick={handleClearFilters}
             className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
           >
-            Clear filters
+            Clear all filters
           </button>
+        )}
+      </div>
+
+      {/* Advanced-filters panel — collapsible */}
+      {advancedOpen && (
+        <div
+          id="advanced-filters-panel"
+          className="rounded-lg border border-gray-200 bg-gray-50/50 p-4 space-y-4 animate-slide-in-down"
+        >
+          {/* Hire-date range */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+              Hire date range
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label
+                  htmlFor="adv-from-date"
+                  className="block text-xs font-medium text-gray-700 mb-1"
+                >
+                  From
+                </label>
+                <input
+                  type="date"
+                  id="adv-from-date"
+                  value={fromDate}
+                  onChange={(e) => {
+                    setFromDate(e.target.value);
+                    setPage(1);
+                  }}
+                  className="block w-full rounded-md border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="adv-to-date"
+                  className="block text-xs font-medium text-gray-700 mb-1"
+                >
+                  To
+                </label>
+                <input
+                  type="date"
+                  id="adv-to-date"
+                  value={toDate}
+                  onChange={(e) => {
+                    setToDate(e.target.value);
+                    setPage(1);
+                  }}
+                  min={fromDate || undefined}
+                  className="block w-full rounded-md border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Multi-select contract types */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+              Contract types{' '}
+              <span className="text-gray-400 normal-case font-normal">
+                (multi-select)
+              </span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {CONTRACT_OPTIONS.map((opt) => {
+                const checked = contractSet.has(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => toggleContract(opt.value)}
+                    aria-pressed={checked}
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset transition-colors ${
+                      checked
+                        ? 'bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-700'
+                        : 'bg-white text-gray-700 ring-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {checked && (
+                      <svg
+                        className="h-3 w-3"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={3}
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    )}
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Multi-select statuses */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+              Statuses{' '}
+              <span className="text-gray-400 normal-case font-normal">
+                (multi-select)
+              </span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {STATUS_OPTIONS.map((opt) => {
+                const checked = statusSet.has(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => toggleStatus(opt.value)}
+                    aria-pressed={checked}
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset transition-colors capitalize ${
+                      checked
+                        ? 'bg-indigo-600 text-white ring-indigo-600 hover:bg-indigo-700'
+                        : 'bg-white text-gray-700 ring-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {checked && (
+                      <svg
+                        className="h-3 w-3"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={3}
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    )}
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Footer note */}
+          <p className="text-[11px] text-gray-500">
+            Tip: multi-selects narrow results using OR within a group
+            (e.g. picking "Active" + "Suspended" returns rows matching
+            either). Combining groups uses AND across groups.
+          </p>
         </div>
       )}
 
