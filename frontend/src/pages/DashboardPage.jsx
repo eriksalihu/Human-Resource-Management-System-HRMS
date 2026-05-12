@@ -259,6 +259,32 @@ const DashboardPage = () => {
         />
       </div>
 
+      {/* Advanced analytics row (commit 219). HR / Admin payroll trend
+          is hidden from non-privileged users since payroll totals are
+          sensitive; the other three widgets show for everyone. */}
+      {(isHR || charts?.training_completion || charts?.performance_by_department) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {isHR && (
+            <SalaryTrendChart
+              data={charts?.salary_trend?.series || []}
+              loading={loading}
+            />
+          )}
+          <LeaveBalanceChart
+            data={charts?.leave_balance || null}
+            loading={loading}
+          />
+          <TrainingCompletionDonut
+            data={charts?.training_completion || null}
+            loading={loading}
+          />
+          <PerformanceByDeptChart
+            data={charts?.performance_by_department?.series || []}
+            loading={loading}
+          />
+        </div>
+      )}
+
       {/* Lower row: attendance / leave calendar / recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <AttendanceSummary
@@ -286,6 +312,406 @@ const DashboardPage = () => {
         <div className="flex justify-center py-10">
           <LoadingSpinner />
         </div>
+      )}
+    </div>
+  );
+};
+
+/* ──────────────────────────────────────────────────────────────────── */
+/* Advanced chart widgets                                                */
+/* ──────────────────────────────────────────────────────────────────── */
+
+/** Tailwind palette reused by the advanced charts so colors stay coherent. */
+const CHART_PALETTE = [
+  '#4f46e5', // indigo
+  '#10b981', // emerald
+  '#f59e0b', // amber
+  '#ef4444', // rose
+  '#0ea5e9', // sky
+  '#a855f7', // purple
+  '#14b8a6', // teal
+  '#f97316', // orange
+];
+
+const colorFor = (i) => CHART_PALETTE[i % CHART_PALETTE.length];
+
+/** Tailwind-tone map for leave types — matches the LeaveRequestList palette. */
+const LEAVE_TYPE_TONE = {
+  annual: 'bg-indigo-500',
+  sick: 'bg-rose-500',
+  personal: 'bg-sky-500',
+  maternity: 'bg-pink-500',
+  paternity: 'bg-purple-500',
+  unpaid: 'bg-gray-500',
+};
+
+/**
+ * SalaryTrendChart — small line chart of total net payroll across the
+ * trailing 6 months. Hand-drawn SVG polyline + dots; dependency-free.
+ */
+const SalaryTrendChart = ({ data = [], loading = false }) => {
+  // Geometry
+  const W = 360;
+  const H = 200;
+  const PAD = { top: 16, right: 16, bottom: 32, left: 48 };
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top - PAD.bottom;
+
+  const max = Math.max(1, ...data.map((d) => Number(d.total_net) || 0));
+  const niceMax = max <= 100 ? max : Math.ceil(max / 1000) * 1000;
+
+  // Map each row to an (x, y) coordinate in the SVG viewport.
+  const points = data.map((row, i) => {
+    const x =
+      data.length === 1
+        ? PAD.left + innerW / 2
+        : PAD.left + (i / (data.length - 1)) * innerW;
+    const y =
+      PAD.top + innerH - ((Number(row.total_net) || 0) / niceMax) * innerH;
+    return { x, y, row };
+  });
+
+  const polyline = points.map((p) => `${p.x},${p.y}`).join(' ');
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-900">
+          Net payroll — last {data.length || 6} months
+        </h3>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center" style={{ height: H }}>
+          <LoadingSpinner />
+        </div>
+      ) : data.length === 0 ? (
+        <div
+          className="flex items-center justify-center text-sm text-gray-500"
+          style={{ height: H }}
+        >
+          No salary data yet.
+        </div>
+      ) : (
+        <svg
+          width="100%"
+          viewBox={`0 0 ${W} ${H}`}
+          role="img"
+          aria-label="Salary trend"
+        >
+          {/* Y-axis grid lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map((frac, idx) => {
+            const y = PAD.top + (1 - frac) * innerH;
+            return (
+              <g key={`grid-${idx}`}>
+                <line
+                  x1={PAD.left}
+                  x2={PAD.left + innerW}
+                  y1={y}
+                  y2={y}
+                  stroke="#e5e7eb"
+                  strokeDasharray={idx === 0 ? '0' : '4 4'}
+                />
+                <text
+                  x={PAD.left - 6}
+                  y={y}
+                  textAnchor="end"
+                  dominantBaseline="middle"
+                  className="fill-gray-500 text-[10px]"
+                >
+                  €{Math.round(niceMax * frac).toLocaleString()}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Polyline + dots */}
+          <polyline
+            points={polyline}
+            fill="none"
+            stroke={CHART_PALETTE[0]}
+            strokeWidth="2"
+          />
+          {points.map((p, i) => (
+            <g key={`pt-${i}`}>
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r="3.5"
+                fill="white"
+                stroke={CHART_PALETTE[0]}
+                strokeWidth="2"
+              >
+                <title>
+                  {p.row.label}: €{Number(p.row.total_net).toLocaleString()}
+                </title>
+              </circle>
+              <text
+                x={p.x}
+                y={PAD.top + innerH + 16}
+                textAnchor="middle"
+                className="fill-gray-600 text-[10px]"
+              >
+                {p.row.label?.slice(5) /* MM only */}
+              </text>
+            </g>
+          ))}
+        </svg>
+      )}
+    </div>
+  );
+};
+
+/**
+ * LeaveBalanceChart — horizontal bar chart of approved leave days by
+ * type for the current year. Each bar is a leave-type colour.
+ */
+const LeaveBalanceChart = ({ data, loading = false }) => {
+  const series = data?.by_type || [];
+  const max = Math.max(1, ...series.map((r) => Number(r.total_days) || 0));
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-900">
+          Approved leave days — {data?.year || new Date().getFullYear()}
+        </h3>
+        {data?.total_employees != null && (
+          <span className="text-xs text-gray-500">
+            across {data.total_employees} active employees
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center py-10">
+          <LoadingSpinner />
+        </div>
+      ) : series.length === 0 ? (
+        <p className="text-sm text-gray-500 py-6 text-center">
+          No approved leave requests this year.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {series.map((row) => {
+            const pct = (Number(row.total_days) || 0) / max;
+            const tone = LEAVE_TYPE_TONE[row.lloji] || 'bg-gray-400';
+            return (
+              <li key={row.lloji}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="capitalize text-gray-700">{row.lloji}</span>
+                  <span className="text-gray-600">
+                    <span className="font-semibold text-gray-900">
+                      {row.total_days}
+                    </span>{' '}
+                    days
+                    <span className="text-gray-400 ml-1">
+                      · {row.approved_count} req
+                      {row.pending_count > 0
+                        ? ` (+${row.pending_count} pending)`
+                        : ''}
+                    </span>
+                  </span>
+                </div>
+                <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className={`${tone} h-2 rounded-full transition-all`}
+                    style={{ width: `${Math.max(pct * 100, row.total_days > 0 ? 3 : 0)}%` }}
+                  />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+};
+
+/**
+ * TrainingCompletionDonut — donut chart of overall participant status
+ * counts (enrolled / completed / dropped / no-show), with the headline
+ * completion rate centred in the hole.
+ */
+const TrainingCompletionDonut = ({ data, loading = false }) => {
+  const overall = data?.overall || null;
+  const SIZE = 200;
+  const CX = SIZE / 2;
+  const CY = SIZE / 2;
+  const RO = SIZE / 2 - 8;
+  const RI = RO * 0.6;
+
+  const total =
+    overall
+      ? (overall.enrolled || 0) +
+        (overall.completed || 0) +
+        (overall.dropped || 0) +
+        (overall.no_show || 0)
+      : 0;
+
+  // Slices with explicit colours so legend + arc match.
+  const slices = overall
+    ? [
+        { key: 'completed', label: 'Completed', value: overall.completed || 0, color: '#10b981' },
+        { key: 'enrolled', label: 'Enrolled', value: overall.enrolled || 0, color: '#0ea5e9' },
+        { key: 'dropped', label: 'Dropped', value: overall.dropped || 0, color: '#f59e0b' },
+        { key: 'no_show', label: 'No-show', value: overall.no_show || 0, color: '#ef4444' },
+      ].filter((s) => s.value > 0)
+    : [];
+
+  // Convert each slice to an SVG arc.
+  let cursor = 0;
+  const arcs = slices.map((s) => {
+    const start = cursor;
+    const fraction = total > 0 ? s.value / total : 0;
+    const end = cursor + fraction * 360;
+    cursor = end;
+
+    const polar = (deg) => {
+      const rad = ((deg - 90) * Math.PI) / 180;
+      return {
+        x: CX + RO * Math.cos(rad),
+        y: CY + RO * Math.sin(rad),
+      };
+    };
+    const polarInner = (deg) => {
+      const rad = ((deg - 90) * Math.PI) / 180;
+      return {
+        x: CX + RI * Math.cos(rad),
+        y: CY + RI * Math.sin(rad),
+      };
+    };
+    const safeEnd = end - start >= 360 ? start + 359.99 : end;
+    const largeArc = safeEnd - start <= 180 ? 0 : 1;
+    const outerStart = polar(start);
+    const outerEnd = polar(safeEnd);
+    const innerStart = polarInner(safeEnd);
+    const innerEnd = polarInner(start);
+
+    const d = [
+      `M ${outerStart.x} ${outerStart.y}`,
+      `A ${RO} ${RO} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+      `L ${innerStart.x} ${innerStart.y}`,
+      `A ${RI} ${RI} 0 ${largeArc} 0 ${innerEnd.x} ${innerEnd.y}`,
+      'Z',
+    ].join(' ');
+
+    return { ...s, d };
+  });
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-900">
+          Training completion
+        </h3>
+        {data?.trainings_total != null && (
+          <span className="text-xs text-gray-500">
+            {data.trainings_total} training{data.trainings_total === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center py-10">
+          <LoadingSpinner />
+        </div>
+      ) : total === 0 ? (
+        <p className="text-sm text-gray-500 py-6 text-center">
+          No training participants yet.
+        </p>
+      ) : (
+        <div className="flex flex-col items-center">
+          <div className="relative" style={{ width: SIZE, height: SIZE }}>
+            <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+              {arcs.map((arc) => (
+                <path key={arc.key} d={arc.d} fill={arc.color}>
+                  <title>
+                    {arc.label}: {arc.value} ({((arc.value / total) * 100).toFixed(1)}%)
+                  </title>
+                </path>
+              ))}
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-2xl font-bold text-gray-900">
+                {overall.completion_rate}%
+              </span>
+              <span className="text-xs text-gray-500">completed</span>
+            </div>
+          </div>
+
+          <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1 text-xs w-full">
+            {slices.map((s) => (
+              <li key={s.key} className="flex items-center gap-2 truncate">
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
+                  style={{ background: s.color }}
+                />
+                <span className="truncate text-gray-700">{s.label}</span>
+                <span className="ml-auto text-gray-500 shrink-0">{s.value}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * PerformanceByDeptChart — horizontal bar chart of average performance
+ * rating per department (0..5). Tooltip shows review count.
+ */
+const PerformanceByDeptChart = ({ data = [], loading = false }) => {
+  const filtered = data.filter((d) => Number(d.review_count) > 0);
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-900">
+          Performance by department
+        </h3>
+        <span className="text-xs text-gray-500">average rating · last 12 mo</span>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center items-center py-10">
+          <LoadingSpinner />
+        </div>
+      ) : filtered.length === 0 ? (
+        <p className="text-sm text-gray-500 py-6 text-center">
+          No performance reviews in the last year.
+        </p>
+      ) : (
+        <ul className="space-y-2.5">
+          {filtered.map((row, i) => {
+            const pct = (Number(row.average) || 0) / 5;
+            return (
+              <li key={row.department_id}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-700">{row.emertimi}</span>
+                  <span className="text-gray-600">
+                    <span className="font-semibold text-gray-900">
+                      {row.average.toFixed(2)}
+                    </span>
+                    <span className="text-gray-400 ml-1">
+                      / 5 · {row.review_count} review{row.review_count === 1 ? '' : 's'}
+                    </span>
+                  </span>
+                </div>
+                <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className="h-2 rounded-full transition-all"
+                    style={{
+                      width: `${Math.max(pct * 100, 3)}%`,
+                      background: colorFor(i),
+                    }}
+                  />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );
