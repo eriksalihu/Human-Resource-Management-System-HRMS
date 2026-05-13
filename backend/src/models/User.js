@@ -71,11 +71,26 @@ const findById = async (id) => {
 
 /**
  * Find a user by email (includes password_hash for authentication).
+ *
+ * Note: this is one of the rare callers that LEGITIMATELY needs the
+ * password_hash column (auth.service.login bcrypts against it). All
+ * other reads should go through findById, which excludes the hash.
+ *
+ * Explicit column list keeps the result shape stable across schema
+ * changes — adding new columns won't accidentally widen this payload.
+ *
  * @param {string} email - User email
  * @returns {Promise<Object|null>}
  */
 const findByEmail = async (email) => {
-  const [rows] = await db.query('SELECT * FROM Users WHERE email = ?', [email]);
+  const [rows] = await db.query(
+    `SELECT id, email, password_hash, first_name, last_name, phone,
+            profile_image, is_active, email_verified,
+            failed_login_attempts, locked_until, last_login_at, last_login_ip,
+            created_at, updated_at
+     FROM Users WHERE email = ?`,
+    [email]
+  );
   return rows[0] || null;
 };
 

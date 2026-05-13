@@ -219,8 +219,13 @@ const findByPeriod = async (muaji, viti) => {
  * @returns {Promise<Object|null>}
  */
 const findByEmployeePeriod = async (employeeId, muaji, viti) => {
+  // Explicit column list — the (employee_id, muaji, viti) unique index
+  // (migration 010) covers this query so the DB only touches the index
+  // and one row lookup. Avoiding SELECT * keeps the read pattern lean.
   const [rows] = await db.query(
-    `SELECT * FROM Salaries
+    `SELECT id, employee_id, paga_baze, bonuse, zbritje, paga_neto,
+            muaji, viti, statusi, data_pageses, created_at, updated_at
+     FROM Salaries
      WHERE employee_id = ? AND muaji = ? AND viti = ?
      LIMIT 1`,
     [employeeId, muaji, viti]

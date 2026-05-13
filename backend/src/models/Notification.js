@@ -49,8 +49,12 @@ const findByUser = async (userId, { unreadOnly = false, limit = 50 } = {}) => {
     conditions.push('is_read = FALSE');
   }
 
+  // Explicit column list mirrors the Notifications table schema from
+  // migration 018. Using the `idx_user_read` covering index for the
+  // user-scoped + unread filter.
   const [rows] = await db.query(
-    `SELECT * FROM Notifications
+    `SELECT id, user_id, title, message, type, link, is_read, read_at, created_at
+     FROM Notifications
      WHERE ${conditions.join(' AND ')}
      ORDER BY created_at DESC
      LIMIT ?`,

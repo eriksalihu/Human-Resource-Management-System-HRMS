@@ -7,11 +7,21 @@
 const db = require('../config/db');
 
 /**
+ * Standard column list for Roles. Defined once so every read returns the
+ * same shape and adding new columns is a single edit. The table only has
+ * five fields so the saving over SELECT * is marginal, but it keeps the
+ * model-level discipline consistent with the rest of the codebase.
+ */
+const ROLE_COLUMNS = 'id, name, description, created_at, updated_at';
+
+/**
  * Find all roles.
  * @returns {Promise<Array>} List of all roles
  */
 const findAll = async () => {
-  const [rows] = await db.query('SELECT * FROM Roles ORDER BY id ASC');
+  const [rows] = await db.query(
+    `SELECT ${ROLE_COLUMNS} FROM Roles ORDER BY id ASC`
+  );
   return rows;
 };
 
@@ -21,7 +31,10 @@ const findAll = async () => {
  * @returns {Promise<Object|null>}
  */
 const findById = async (id) => {
-  const [rows] = await db.query('SELECT * FROM Roles WHERE id = ?', [id]);
+  const [rows] = await db.query(
+    `SELECT ${ROLE_COLUMNS} FROM Roles WHERE id = ?`,
+    [id]
+  );
   return rows[0] || null;
 };
 
@@ -31,7 +44,10 @@ const findById = async (id) => {
  * @returns {Promise<Object|null>}
  */
 const findByName = async (name) => {
-  const [rows] = await db.query('SELECT * FROM Roles WHERE name = ?', [name]);
+  const [rows] = await db.query(
+    `SELECT ${ROLE_COLUMNS} FROM Roles WHERE name = ?`,
+    [name]
+  );
   return rows[0] || null;
 };
 

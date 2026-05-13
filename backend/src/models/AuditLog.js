@@ -117,9 +117,15 @@ const findAll = async (filters = {}) => {
   const offset = (currentPage - 1) * perPage;
   const totalPages = Math.ceil(total / perPage);
 
-  // Fetch page
+  // Fetch page — explicit column list mirrors the AuditLogs schema from
+  // migration 017. `old_values` / `new_values` are JSON-typed and can be
+  // large; we keep them in the response because audit consumers
+  // typically want diffs alongside the meta. The (user_id, created_at)
+  // composite index keeps the user-scoped + chronological filters cheap.
   const [rows] = await db.query(
-    `SELECT * FROM AuditLogs ${whereClause}
+    `SELECT id, user_id, action, entity, entity_id,
+            old_values, new_values, ip_address, created_at
+     FROM AuditLogs ${whereClause}
      ORDER BY ${safeSortBy} ${safeSortOrder}
      LIMIT ? OFFSET ?`,
     [...params, perPage, offset]
@@ -146,8 +152,14 @@ const findAll = async (filters = {}) => {
  * @returns {Promise<Object[]>} Audit log rows in chronological order
  */
 const findByEntity = async (entity, entityId) => {
+  // Explicit column list matches findAll's projection so callers can
+  // swap between the two without seeing a shape difference. The
+  // (entity, entity_id) composite index from migration 017 services
+  // this query directly.
   const [rows] = await db.query(
-    `SELECT * FROM AuditLogs
+    `SELECT id, user_id, action, entity, entity_id,
+            old_values, new_values, ip_address, created_at
+     FROM AuditLogs
      WHERE entity = ? AND entity_id = ?
      ORDER BY created_at DESC`,
     [entity, entityId]

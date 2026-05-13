@@ -32,8 +32,16 @@ const create = async (data) => {
  * @returns {Promise<Object|null>} The token row or null
  */
 const findByToken = async (token) => {
+  // Explicit column list (instead of SELECT *) — keeps the result shape
+  // stable across schema migrations and avoids accidentally fanning
+  // wider columns into every refresh-flow log line. Uses the
+  // `idx_token` covering index from migration 006 for the lookup.
   const [rows] = await db.query(
-    'SELECT * FROM RefreshTokens WHERE token = ? LIMIT 1',
+    `SELECT id, user_id, token, expires_at, created_at, revoked_at,
+            replaced_by_token, created_by_ip, revoked_by_ip
+     FROM RefreshTokens
+     WHERE token = ?
+     LIMIT 1`,
     [token]
   );
   return rows[0] || null;
