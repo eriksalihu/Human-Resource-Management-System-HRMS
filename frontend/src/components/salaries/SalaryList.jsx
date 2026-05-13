@@ -21,6 +21,7 @@ import FilterDropdown from '../common/FilterDropdown';
 import ConfirmDialog from '../common/ConfirmDialog';
 import Modal from '../common/Modal';
 import { useToast } from '../common/Toast';
+import { downloadCsv, stampedFilename } from '../../utils/csv';
 
 /** Status filter options (values must match the Salaries.statusi ENUM). */
 const STATUS_OPTIONS = [
@@ -339,6 +340,46 @@ const SalaryList = ({ onAdd, onEdit, onView }) => {
   };
 
   /** Reset all filters in one click. */
+  /**
+   * Export the current salaries page to CSV. Includes the period (month/
+   * year), base / bonuses / deductions / net, payment status, and a
+   * formatted paid-on date for spreadsheet-friendly downstream use.
+   */
+  const handleExportCsv = () => {
+    if (salaries.length === 0) {
+      addToast('Nothing to export — adjust filters and try again', 'info');
+      return;
+    }
+    const headers = [
+      'Employee #',
+      'First name',
+      'Last name',
+      'Month',
+      'Year',
+      'Base pay',
+      'Bonuses',
+      'Deductions',
+      'Net pay',
+      'Status',
+      'Paid on',
+    ];
+    const rows = salaries.map((s) => [
+      s.numri_punonjesit || '',
+      s.first_name || '',
+      s.last_name || '',
+      s.muaji ?? '',
+      s.viti ?? '',
+      Number(s.paga_baze ?? 0).toFixed(2),
+      Number(s.bonuse ?? 0).toFixed(2),
+      Number(s.zbritje ?? 0).toFixed(2),
+      Number(s.paga_neto ?? 0).toFixed(2),
+      s.statusi || '',
+      s.data_pageses ? String(s.data_pageses).slice(0, 10) : '',
+    ]);
+    downloadCsv(stampedFilename('salaries'), headers, rows);
+    addToast(`Exported ${salaries.length} salary records`, 'success');
+  };
+
   const handleClearFilters = () => {
     setEmployeeId('');
     setMuaji('');
@@ -487,6 +528,17 @@ const SalaryList = ({ onAdd, onEdit, onView }) => {
               />
             </svg>
             Generate payroll
+          </button>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={salaries.length === 0}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
+            </svg>
+            Export CSV
           </button>
           <button
             onClick={() => onAdd?.()}

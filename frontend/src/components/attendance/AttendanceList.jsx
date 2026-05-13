@@ -12,6 +12,7 @@ import Pagination from '../common/Pagination';
 import FilterDropdown from '../common/FilterDropdown';
 import ConfirmDialog from '../common/ConfirmDialog';
 import { useToast } from '../common/Toast';
+import { downloadCsv, stampedFilename } from '../../utils/csv';
 
 /** Status options must match the Attendances.statusi ENUM. */
 const STATUS_OPTIONS = [
@@ -188,6 +189,44 @@ const AttendanceList = ({
   const bumpPage = (setter) => (value) => {
     setter(value);
     setPage(1);
+  };
+
+  /**
+   * Export the current attendance page to CSV. Times are written in
+   * HH:MM (consistent with the table) and hours_worked is rounded to two
+   * decimal places. Like the other lists, only the loaded page exports.
+   */
+  const handleExportCsv = () => {
+    if (rows.length === 0) {
+      addToast('Nothing to export — adjust filters and try again', 'info');
+      return;
+    }
+    const headers = [
+      'Employee #',
+      'First name',
+      'Last name',
+      'Date',
+      'Check in',
+      'Check out',
+      'Hours worked',
+      'Status',
+      'Notes',
+    ];
+    const exportRows = rows.map((r) => [
+      r.numri_punonjesit || '',
+      r.first_name || '',
+      r.last_name || '',
+      r.data ? String(r.data).slice(0, 10) : '',
+      formatTime(r.ora_hyrjes),
+      formatTime(r.ora_daljes),
+      Number.isFinite(Number(r.hours_worked))
+        ? Number(r.hours_worked).toFixed(2)
+        : '',
+      r.statusi || '',
+      r.shenimet || '',
+    ]);
+    downloadCsv(stampedFilename('attendance'), headers, exportRows);
+    addToast(`Exported ${rows.length} attendance records`, 'success');
   };
 
   const handleClearFilters = () => {
@@ -426,27 +465,40 @@ const AttendanceList = ({
             Daily check-in records with status and hours worked
           </p>
         </div>
-        {showAddButton && onAdd && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => onAdd()}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+            type="button"
+            onClick={handleExportCsv}
+            disabled={rows.length === 0}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
             </svg>
-            New entry
+            Export CSV
           </button>
-        )}
+          {showAddButton && onAdd && (
+            <button
+              onClick={() => onAdd()}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              New entry
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
