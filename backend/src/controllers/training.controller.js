@@ -629,6 +629,232 @@ const getMyTrainings = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/trainings/report
+ *
+ * Aggregate training analytics across the catalog. Returns four
+ * pre-rolled sections so the frontend dashboard widget can render each
+ * panel without further math:
+ *
+ *   - **overview**: total trainings + breakdown by status, participant
+ *     counts, average capacity utilization
+ *   - **completion_rates**: per-training completion %, sorted desc.
+ *     "Completed" = participant_status IN ('completed') divided by
+ *     enrolled+completed (excludes dropped/no-show — those rows weren't
+ *     opportunities to complete in the first place).
+ *   - **average_ratings**: per-training average rating + total raters
+ *     (NULL `vleresimi` rows are excluded from both numerator and
+ *     denominator), sorted by rating desc with min-N gating.
+ *   - **popularity**: enrollment count per training, sorted desc.
+ *     The top 3 are "most popular", bottom 3 are "least popular".
+ *
+ * Optional query params let HR scope the report:
+ *   ?from_date=YYYY-MM-DD   — trainings whose start date >= this
+ *   ?to_date=YYYY-MM-DD     — trainings whose start date <= this
+ *   ?min_raters=N           — only count trainings with N+ raters in
+ *                              the average_ratings list (default 1)
+ *
+ * @access HR / Admin / Department Manager (gated at route level)
+ */
+const getTrainingReport = async (req, res, next) => {
+  try {
+    const db = require('../config/db');
+    const { from_date, to_date } = req.query;
+    const minRaters = Math.max(
+      1,
+      Math.min(50, parseInt(req.query.min_raters, 10) || 1)
+    );
+
+    /** Shared WHERE clause for the trainings table (date scope). */
+    const conditions = [];
+    const params = [];
+    if (from_date) {
+      conditions.push('t.data_fillimit >= ?');
+      params.push(from_date);
+    }
+    if (to_date) {
+      conditions.push('t.data_fillimit <= ?');
+      params.push(to_date);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // ── 1. Overview totals + status histogram ───────────────────────
+    const [overviewRows] = await db.query(
+      `SELECT
+         COUNT(*)                                          AS total_trainings,
+         SUM(t.statusi = 'upcoming')                       AS upcoming,
+         SUM(t.statusi = 'ongoing')                        AS ongoing,
+         SUM(t.statusi = 'completed')                      AS completed,
+         SUM(t.statusi = 'cancelled')                      AS cancelled,
+         COALESCE(SUM(t.kapaciteti), 0)                    AS total_capacity
+       FROM Trainings t
+       ${where}`,
+      params
+    );
+    const overviewRow = overviewRows[0] || {};
+
+    /** Total enrolled / completed participants across the scoped trainings. */
+    const [participantTotals] = await db.query(
+      `SELECT
+         COUNT(*)                                                AS total_participants,
+         SUM(tp.statusi = 'enrolled')                            AS active_enrollments,
+         SUM(tp.statusi = 'completed')                           AS completions,
+         SUM(tp.statusi = 'dropped')                             AS dropouts,
+         SUM(tp.statusi = 'no-show')                             AS no_shows
+       FROM TrainingParticipants tp
+       LEFT JOIN Trainings t ON tp.training_id = t.id
+       ${where}`,
+      params
+    );
+    const partRow = participantTotals[0] || {};
+
+    const totalCapacity = Number(overviewRow.total_capacity) || 0;
+    const totalParticipants = Number(partRow.total_participants) || 0;
+    const utilization =
+      totalCapacity > 0
+        ? +((totalParticipants / totalCapacity) * 100).toFixed(1)
+        : 0;
+
+    // ── 2. Per-training completion rates ────────────────────────────
+    // "Eligible to complete" = enrolled + completed (dropouts / no-shows
+    // never had the chance). Trainings with zero eligible participants
+    // are excluded so we don't divide by zero.
+    const [completionRows] = await db.query(
+      `SELECT
+         t.id,
+         t.titulli,
+         t.statusi,
+         t.data_fillimit,
+         t.data_perfundimit,
+         COUNT(tp.id)                                                AS participant_count,
+         SUM(tp.statusi IN ('enrolled', 'completed'))                AS eligible,
+         SUM(tp.statusi = 'completed')                               AS completed,
+         CASE
+           WHEN SUM(tp.statusi IN ('enrolled', 'completed')) > 0
+           THEN ROUND(
+             SUM(tp.statusi = 'completed') /
+             SUM(tp.statusi IN ('enrolled', 'completed')) * 100,
+             1
+           )
+           ELSE NULL
+         END                                                         AS completion_rate
+       FROM Trainings t
+       LEFT JOIN TrainingParticipants tp ON tp.training_id = t.id
+       ${where}
+       GROUP BY t.id, t.titulli, t.statusi, t.data_fillimit, t.data_perfundimit
+       HAVING participant_count > 0
+       ORDER BY completion_rate DESC, t.titulli ASC`,
+      params
+    );
+
+    // ── 3. Per-training average rating ──────────────────────────────
+    const [ratingRows] = await db.query(
+      `SELECT
+         t.id,
+         t.titulli,
+         t.statusi,
+         COUNT(tp.vleresimi)                                AS rater_count,
+         ROUND(AVG(tp.vleresimi), 2)                        AS average_rating,
+         MIN(tp.vleresimi)                                  AS min_rating,
+         MAX(tp.vleresimi)                                  AS max_rating
+       FROM Trainings t
+       LEFT JOIN TrainingParticipants tp
+         ON tp.training_id = t.id AND tp.vleresimi IS NOT NULL
+       ${where}
+       GROUP BY t.id, t.titulli, t.statusi
+       HAVING rater_count >= ?
+       ORDER BY average_rating DESC, rater_count DESC`,
+      [...params, minRaters]
+    );
+
+    // ── 4. Popularity ranking (enrollment counts) ───────────────────
+    const [popularityRows] = await db.query(
+      `SELECT
+         t.id,
+         t.titulli,
+         t.statusi,
+         t.data_fillimit,
+         COUNT(tp.id) AS enrollment_count
+       FROM Trainings t
+       LEFT JOIN TrainingParticipants tp ON tp.training_id = t.id
+       ${where}
+       GROUP BY t.id, t.titulli, t.statusi, t.data_fillimit
+       ORDER BY enrollment_count DESC, t.titulli ASC`,
+      params
+    );
+
+    res.json({
+      success: true,
+      data: {
+        scope: {
+          from_date: from_date || null,
+          to_date: to_date || null,
+          min_raters: minRaters,
+        },
+        overview: {
+          total_trainings: Number(overviewRow.total_trainings) || 0,
+          by_status: {
+            upcoming: Number(overviewRow.upcoming) || 0,
+            ongoing: Number(overviewRow.ongoing) || 0,
+            completed: Number(overviewRow.completed) || 0,
+            cancelled: Number(overviewRow.cancelled) || 0,
+          },
+          total_capacity: totalCapacity,
+          total_participants: totalParticipants,
+          active_enrollments: Number(partRow.active_enrollments) || 0,
+          completions: Number(partRow.completions) || 0,
+          dropouts: Number(partRow.dropouts) || 0,
+          no_shows: Number(partRow.no_shows) || 0,
+          capacity_utilization_pct: utilization,
+        },
+        completion_rates: completionRows.map((r) => ({
+          id: r.id,
+          titulli: r.titulli,
+          statusi: r.statusi,
+          data_fillimit: r.data_fillimit,
+          data_perfundimit: r.data_perfundimit,
+          participant_count: Number(r.participant_count) || 0,
+          eligible: Number(r.eligible) || 0,
+          completed: Number(r.completed) || 0,
+          completion_rate: r.completion_rate == null ? null : Number(r.completion_rate),
+        })),
+        average_ratings: ratingRows.map((r) => ({
+          id: r.id,
+          titulli: r.titulli,
+          statusi: r.statusi,
+          rater_count: Number(r.rater_count) || 0,
+          average_rating: r.average_rating == null ? null : Number(r.average_rating),
+          min_rating: r.min_rating == null ? null : Number(r.min_rating),
+          max_rating: r.max_rating == null ? null : Number(r.max_rating),
+        })),
+        popularity: {
+          most_popular: popularityRows.slice(0, 3).map((r) => ({
+            id: r.id,
+            titulli: r.titulli,
+            enrollment_count: Number(r.enrollment_count) || 0,
+          })),
+          least_popular: popularityRows
+            .slice(-3)
+            .reverse()
+            .map((r) => ({
+              id: r.id,
+              titulli: r.titulli,
+              enrollment_count: Number(r.enrollment_count) || 0,
+            })),
+          all: popularityRows.map((r) => ({
+            id: r.id,
+            titulli: r.titulli,
+            statusi: r.statusi,
+            enrollment_count: Number(r.enrollment_count) || 0,
+          })),
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAll,
   getUpcoming,
@@ -644,4 +870,5 @@ module.exports = {
   updateParticipantStatus,
   rateParticipation,
   getMyTrainings,
+  getTrainingReport,
 };
