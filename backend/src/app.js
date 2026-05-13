@@ -59,7 +59,57 @@ app.use(securityHeaders());
 app.use(cors(corsOptions));
 
 // ==================== Compression + Logging ====================
-app.use(compression());
+// Compression tuned for JSON-heavy API traffic:
+//   - `threshold: 1024` skips compressing responses smaller than 1 KB
+//     (the gzip header itself + CPU cost exceeds the savings for tiny
+//     payloads — list endpoints, dashboard widgets, etc. are well above
+//     this floor)
+//   - `level: 6` is the zlib default — best size/CPU trade-off
+//   - `filter` skips compression when the client opts out via
+//     `x-no-compression: true` (handy for streaming endpoints / debugging)
+app.use(
+  compression({
+    threshold: 1024,
+    level: 6,
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) return false;
+      return compression.filter(req, res);
+    },
+  })
+);
+
+// ==================== ETag + Cache Headers ====================
+// Express has ETag generation built in; we set the strong variant so
+// caches do byte-equality comparison rather than the weak/timestamp
+// heuristic. Combined with the per-route Cache-Control middleware below,
+// this gives the SPA's axios layer enough information to do conditional
+// requests when we eventually wire them up.
+app.set('etag', 'strong');
+
+/**
+ * Cache-Control policy:
+ *   - **API responses** (everything under `/api`, except `/api/health`)
+ *     get `no-store` so HR data is never served from a shared cache.
+ *     Sensitive fields and per-user payloads don't belong in a CDN.
+ *   - **`/api/health`** gets a short 10-second cache so liveness probes
+ *     don't hammer the DB. The check itself is read-only and any
+ *     legitimate caller is fine with 10s of staleness.
+ *
+ * Static-asset cache headers (when we eventually serve the SPA build
+ * from Express) would slot in below as a separate middleware mounted
+ * before the API routes — `express.static({ maxAge: '1y', immutable: true })`
+ * for hashed filenames. The Vite dev server handles that itself today,
+ * so we don't repeat it here.
+ */
+app.use((req, res, next) => {
+  if (req.path === '/api/health') {
+    res.set('Cache-Control', 'public, max-age=10');
+  } else if (req.path.startsWith('/api')) {
+    res.set('Cache-Control', 'no-store');
+  }
+  next();
+});
+
 app.use(morgan('dev'));
 
 // ==================== Body Parsing ====================
