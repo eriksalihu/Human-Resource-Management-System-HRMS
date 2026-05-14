@@ -1,7 +1,7 @@
 /**
  * @file frontend/src/api/axiosInstance.js
- * @description Axios instance with automatic token refresh, request queueing during refresh, replay-on-success, error-code-driven logout, and request-ID tracing
- * @author Dev B
+ * @description Axios instance with automatic token refresh, request queueing during refresh, replay-on-success, error-code-driven logout, request-ID tracing, and in-flight GET deduplication
+ * @author Dev B (original), Dev A (request deduplication)
  *
  * Refresh flow:
  *   1. Request returns 401
@@ -25,6 +25,17 @@
  *   so backend access logs and frontend network panel rows can be
  *   correlated when chasing a bug. The middleware echoes it back on the
  *   response — listeners can see the round-trip ID in dev tools.
+ *
+ * Request deduplication (commit 235 — Dev A):
+ *   GET requests with identical URL+params that are already in-flight
+ *   share a single underlying network call. If two components mount in
+ *   the same tick and both ask for `/employees?page=1`, the second one
+ *   resolves with the first one's response — one round-trip instead of
+ *   two. Dedup is intentionally limited to GETs (mutations must always
+ *   be sent) and to calls without an `AbortSignal` (a signal-cancel by
+ *   one caller would otherwise abort everyone else awaiting the shared
+ *   promise). Auth endpoints are excluded too because their semantics
+ *   depend on each call being its own attempt.
  */
 
 import axios from 'axios';
@@ -157,6 +168,8 @@ const isPermanentAuthFailure = (error, originalUrl) => {
 const triggerForcedLogout = (reason) => {
   setAccessToken(null);
   onTokenRefreshed(null);
+  // Drop any in-flight GETs so they don't replay onto the next user.
+  inFlightGets.clear();
 
   if (onAuthFailure) {
     try {
@@ -176,6 +189,73 @@ const triggerForcedLogout = (reason) => {
 };
 
 /* ──────────────────────────────────────────────────────────────────── */
+/* In-flight GET deduplication                                           */
+/* ──────────────────────────────────────────────────────────────────── */
+
+/**
+ * Map of in-flight GET requests keyed by URL+params signature. Two
+ * components asking for the same endpoint in the same tick share the
+ * underlying network round-trip.
+ *
+ * Lives at module scope so dedup applies across the entire SPA — sibling
+ * components, polling timers, and one-off `axiosInstance.get` calls all
+ * benefit without coordination.
+ */
+const inFlightGets = new Map();
+
+/**
+ * Stable JSON stringify for the dedup key. Sorts object keys so the
+ * same params built in different orders across renders produce the
+ * same signature — otherwise we'd miss dedup opportunities whenever a
+ * caller spreads props differently.
+ */
+const stableStringify = (val) => {
+  if (val === null || val === undefined) return '';
+  if (typeof val !== 'object') return String(val);
+  if (Array.isArray(val)) return `[${val.map(stableStringify).join(',')}]`;
+  const keys = Object.keys(val).sort();
+  return `{${keys.map((k) => `${k}:${stableStringify(val[k])}`).join(',')}}`;
+};
+
+/**
+ * Decide whether a request is eligible for dedup. Excludes:
+ *   - Non-GET methods (mutations must always reach the server)
+ *   - Requests with `signal` (a per-caller abort would otherwise cancel
+ *     every shared awaiter)
+ *   - Requests with `_skipDedup === true` (escape hatch — set on a
+ *     config to opt out of dedup when needed)
+ *   - Auth endpoints (login / refresh / logout — semantics depend on
+ *     each call being its own attempt)
+ *
+ * @param {Object} config
+ * @returns {string|null} Dedup key, or `null` if not eligible
+ */
+const buildDedupKey = (config) => {
+  if (!config) return null;
+  const method = (config.method || 'get').toLowerCase();
+  if (method !== 'get') return null;
+  if (config.signal) return null;
+  if (config._skipDedup) return null;
+  const url = config.url || '';
+  if (url.includes('/auth/')) return null;
+  return `GET ${url}?${stableStringify(config.params)}`;
+};
+
+/**
+ * Read the current count of in-flight deduplicated GETs. Exposed for
+ * debugging + test assertions; not part of the public contract.
+ */
+export const __pendingGetCount = () => inFlightGets.size;
+
+/**
+ * Manually clear the dedup map. Call on logout — otherwise a request
+ * issued just before logout could be replayed for a different user.
+ */
+export const clearInFlightRequests = () => {
+  inFlightGets.clear();
+};
+
+/* ──────────────────────────────────────────────────────────────────── */
 /* Axios instance + interceptors                                         */
 /* ──────────────────────────────────────────────────────────────────── */
 
@@ -188,6 +268,50 @@ const axiosInstance = axios.create({
     Accept: 'application/json',
   },
 });
+
+/**
+ * Wrap the default adapter so eligible GET requests are deduplicated.
+ *
+ * Why an adapter wrap (vs a request interceptor): interceptors can
+ * mutate the config but cannot intercept the request → response
+ * fulfillment. The adapter is where the network call actually happens,
+ * so wrapping it lets us return a shared promise.
+ *
+ * The wrapper is intentionally thin:
+ *   1. Compute the dedup key (returns null when ineligible)
+ *   2. If a matching in-flight promise exists, return it
+ *   3. Otherwise, kick off the real request and stash the promise so
+ *      concurrent callers can attach. On settle, drop from the map.
+ */
+const baseAdapter = axiosInstance.defaults.adapter;
+axiosInstance.defaults.adapter = (config) => {
+  const key = buildDedupKey(config);
+
+  if (key && inFlightGets.has(key)) {
+    return inFlightGets.get(key);
+  }
+
+  const promise = baseAdapter(config);
+
+  if (key) {
+    inFlightGets.set(key, promise);
+    // Use a microtask-attached cleanup so the entry is gone before the
+    // next render tick — otherwise back-to-back identical requests in
+    // a finally block could still hit the cache.
+    promise
+      .then(
+        () => {
+          if (inFlightGets.get(key) === promise) inFlightGets.delete(key);
+        },
+        () => {
+          // Always drop on failure too so the next caller can retry.
+          if (inFlightGets.get(key) === promise) inFlightGets.delete(key);
+        }
+      );
+  }
+
+  return promise;
+};
 
 /**
  * Request interceptor — attach Bearer token + per-request id.
