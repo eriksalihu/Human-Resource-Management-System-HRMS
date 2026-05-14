@@ -9,10 +9,24 @@
  *   endpoint (introduced in commit 213); otherwise it stays on the
  *   simpler `/api/employees` listing.
  *
- * @author Dev B
+ *   v3 (commit 230 — Dev A): adds list virtualization for large
+ *   datasets. When the current page contains more than
+ *   VIRTUALIZE_THRESHOLD rows, we swap DataTable for a hand-rolled
+ *   windowed renderer that only mounts the rows currently inside the
+ *   scroll viewport (plus a small overscan buffer). React then mounts
+ *   ~25 DOM nodes regardless of whether the dataset is 50 or 5,000
+ *   rows — scroll latency stays under one frame even on low-end laptops.
+ *
+ *   Why hand-rolled instead of react-window / react-virtuoso:
+ *     - Zero new dependencies (the math is ~40 lines of code)
+ *     - We don't need variable row heights, only fixed-size rows
+ *     - The CSS-grid layout shares column widths between header and
+ *       rows without a layout-thrash from a separate header table
+ *
+ * @author Dev A (virtualization), Dev B (original list)
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import * as employeeApi from '../../api/employeeApi';
 import * as departmentApi from '../../api/departmentApi';
 import axiosInstance from '../../api/axiosInstance';
@@ -72,6 +86,209 @@ const Avatar = ({ src, firstName = '', lastName = '' }) => {
   return (
     <div className="h-9 w-9 rounded-full bg-indigo-100 text-indigo-700 text-sm font-semibold flex items-center justify-center ring-1 ring-indigo-200">
       {initials}
+    </div>
+  );
+};
+
+/* ──────────────────────────────────────────────────────────────────── */
+/* Virtualization constants                                             */
+/* ──────────────────────────────────────────────────────────────────── */
+
+/**
+ * Above this row count we swap to the windowed renderer. The DataTable
+ * itself is fine up to a few hundred rows on modern hardware, but the
+ * column-visibility dropdown + bulk-action bar add per-row state that
+ * starts to feel sluggish around 100. 50 is comfortably below the pain
+ * threshold and matches the largest standard pagination page size.
+ */
+const VIRTUALIZE_THRESHOLD = 50;
+
+/** Fixed row height in pixels. Must match the row's actual rendered height. */
+const ROW_HEIGHT = 64;
+
+/** Max scroll-container height. Roughly 10 visible rows + header. */
+const VIEWPORT_HEIGHT = 640;
+
+/**
+ * Number of rows to render above + below the visible window. Higher
+ * overscan eliminates blank flashes during fast scrolls at the cost of
+ * slightly more DOM nodes. Five is the sweet spot for 60Hz monitors.
+ */
+const OVERSCAN = 5;
+
+/**
+ * CSS-grid template that lays out the 8 columns. The same template is
+ * used for the header and every row so columns line up perfectly.
+ *
+ *   1: avatar (64px fixed)
+ *   2: name + email (flex 2)
+ *   3: employee # (flex 1)
+ *   4: position (flex 1.5)
+ *   5: department (flex 1.3)
+ *   6: contract (flex 1)
+ *   7: status (flex 0.9)
+ *   8: actions (auto-sized to content)
+ */
+const VIRTUAL_GRID_TEMPLATE =
+  '64px minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.9fr) auto';
+
+/**
+ * VirtualizedEmployeeTable — windowed renderer used when the row count
+ * exceeds VIRTUALIZE_THRESHOLD.
+ *
+ * Math:
+ *   - The outer wrapper has a fixed height + `overflow-y: auto`
+ *   - An inner "spacer" div is sized to `totalRows * ROW_HEIGHT` so the
+ *     scrollbar tracks the full dataset
+ *   - Visible rows are absolutely positioned inside the spacer at
+ *     `top = index * ROW_HEIGHT`
+ *   - The visible range is computed from `scrollTop` ± OVERSCAN
+ *
+ * The sticky header re-uses the same CSS-grid template so columns stay
+ * aligned without a shared `<table>` element.
+ *
+ * @param {Object} props
+ * @param {Array} props.rows
+ * @param {Array} props.columns - DataTable column descriptors
+ * @param {string} props.sortBy
+ * @param {string} props.sortOrder
+ * @param {Function} props.onSort
+ * @param {Function} [props.onRowClick]
+ */
+const VirtualizedEmployeeTable = ({
+  rows,
+  columns,
+  sortBy,
+  sortOrder,
+  onSort,
+  onRowClick,
+}) => {
+  const [scrollTop, setScrollTop] = useState(0);
+  const containerRef = useRef(null);
+
+  // Whenever the dataset shrinks (filter applied, page changed) reset
+  // the scrollTop so we don't end up stranded past the new end.
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+      setScrollTop(0);
+    }
+  }, [rows.length]);
+
+  const total = rows.length;
+  const totalHeight = total * ROW_HEIGHT;
+
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
+  const endIndex = Math.min(
+    total - 1,
+    Math.ceil((scrollTop + VIEWPORT_HEIGHT) / ROW_HEIGHT) + OVERSCAN
+  );
+  const visibleRows = rows.slice(startIndex, endIndex + 1);
+
+  return (
+    <div className="rounded-lg ring-1 ring-gray-200 bg-white overflow-hidden">
+      {/* Sticky header */}
+      <div
+        className="grid items-center bg-gray-50 border-b border-gray-200"
+        style={{ gridTemplateColumns: VIRTUAL_GRID_TEMPLATE, height: 48 }}
+      >
+        {columns.map((c) => {
+          const isSorted = sortBy === c.key;
+          return (
+            <div
+              key={c.key}
+              className={`px-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 select-none ${
+                c.sortable ? 'cursor-pointer hover:text-gray-900' : ''
+              }`}
+              onClick={() => c.sortable && onSort?.(c.key)}
+            >
+              <span className="inline-flex items-center gap-1">
+                {c.label}
+                {isSorted && (
+                  <span aria-hidden="true">
+                    {sortOrder === 'ASC' ? '↑' : '↓'}
+                  </span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Scrollable body with total-height spacer */}
+      <div
+        ref={containerRef}
+        className="overflow-y-auto"
+        style={{ height: VIEWPORT_HEIGHT }}
+        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+        role="rowgroup"
+      >
+        <div style={{ height: totalHeight, position: 'relative' }}>
+          {visibleRows.map((row, i) => {
+            const idx = startIndex + i;
+            return (
+              <div
+                key={row.id ?? idx}
+                role="row"
+                onClick={() => onRowClick?.(row)}
+                style={{
+                  position: 'absolute',
+                  top: idx * ROW_HEIGHT,
+                  left: 0,
+                  right: 0,
+                  height: ROW_HEIGHT,
+                  gridTemplateColumns: VIRTUAL_GRID_TEMPLATE,
+                }}
+                className={`grid items-center border-b border-gray-100 ${
+                  onRowClick
+                    ? 'cursor-pointer hover:bg-gray-50'
+                    : 'hover:bg-gray-50/50'
+                }`}
+              >
+                {columns.map((c) => (
+                  <div
+                    key={c.key}
+                    className="px-4 text-sm text-gray-800 truncate"
+                  >
+                    {c.render
+                      ? c.render(row[c.key], row)
+                      : row[c.key] ?? '—'}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Status footer — makes the windowing visible to users so they
+          understand why the scroll behaves differently from a normal page */}
+      <div className="border-t border-gray-200 bg-gray-50 px-4 py-2 text-xs text-gray-500 flex items-center justify-between">
+        <span>
+          Showing rows{' '}
+          <span className="font-medium text-gray-700">
+            {total === 0 ? 0 : startIndex + 1}–{Math.min(endIndex + 1, total)}
+          </span>{' '}
+          of <span className="font-medium text-gray-700">{total}</span>
+        </span>
+        <span className="inline-flex items-center gap-1 text-indigo-600">
+          <svg
+            className="h-3.5 w-3.5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 10V3L4 14h7v7l9-11h-7z"
+            />
+          </svg>
+          Virtualized rendering
+        </span>
+      </div>
     </div>
   );
 };
@@ -763,17 +980,30 @@ const EmployeeList = ({ onAdd, onEdit, onView }) => {
         </div>
       )}
 
-      {/* Data table */}
-      <DataTable
-        columns={columns}
-        data={employees}
-        loading={loading}
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        onSort={handleSort}
-        onRowClick={onView ? (row) => onView(row) : undefined}
-        emptyMessage="No employees found"
-      />
+      {/* Data table — switches to a windowed renderer for large pages.
+          Loading + empty states stay with DataTable since they're already
+          tuned there and the row count is effectively zero. */}
+      {employees.length > VIRTUALIZE_THRESHOLD && !loading ? (
+        <VirtualizedEmployeeTable
+          rows={employees}
+          columns={columns}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSort={handleSort}
+          onRowClick={onView ? (row) => onView(row) : undefined}
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={employees}
+          loading={loading}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSort={handleSort}
+          onRowClick={onView ? (row) => onView(row) : undefined}
+          emptyMessage="No employees found"
+        />
+      )}
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (
