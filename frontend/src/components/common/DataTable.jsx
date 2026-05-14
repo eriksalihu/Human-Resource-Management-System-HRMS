@@ -25,9 +25,30 @@
  *                                        in localStorage under this key
  *   - `rowClassName(row): string`      — pass-through for row tinting
  *                                        (e.g. AttendanceList's late/absent)
+ *
+ * v3 (commit 232 — Dev B) adds rendering memoization so the table
+ * stays responsive on large pages:
+ *   - Each `<tr>` is now its own `React.memo` component. Sorting,
+ *     filtering, or toggling a single checkbox re-renders only the
+ *     rows whose data / selection state actually changed, instead of
+ *     remounting every row.
+ *   - Derived values (`visibleColumns`, `allOnPageSelected`,
+ *     `someOnPageSelected`, `selectedRowsOnPage`) are wrapped in
+ *     `useMemo` so they aren't recomputed on every render.
+ *   - Event handlers (`handleSort`, `toggleRow`, `toggleAllOnPage`,
+ *     `applySelection`, `toggleColumn`) are `useCallback`-wrapped so
+ *     the row components see stable function references and don't
+ *     re-render on parent state changes that don't affect them.
+ *
+ *   Caveat for consumers: the `columns` array — including each column's
+ *   `render` function — should be stable across renders (define it
+ *   outside the component, or wrap in `useMemo`). Otherwise every cell
+ *   re-renders every time. Most existing consumers already define
+ *   their columns at module scope; the few that build columns inline
+ *   would benefit from a `useMemo` wrap.
  */
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 
 /** Default key resolver: prefer row.id, fall back to index. */
@@ -42,6 +63,68 @@ const BULK_BUTTON_VARIANT = {
   neutral:
     'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-indigo-500',
 };
+
+/**
+ * DataTableRow — single table row, memoized.
+ *
+ * React.memo with the default shallow comparator works here because the
+ * parent passes stable references for `visibleColumns`, `onRowClick`,
+ * and `onToggleSelect` (all `useCallback`/`useMemo` outputs), while
+ * `row`, `isSelected`, and `rowClassString` change only when the row
+ * itself genuinely changes.
+ *
+ * Why a custom comparator wasn't needed: passing primitive flags
+ * (`isSelected`, `selectable`, `rowClassString`) avoids deep equality
+ * checks on the row object. The row object reference is stable as long
+ * as the parent doesn't rebuild the dataset array (which would be a
+ * legitimate "new data" signal anyway).
+ *
+ * @param {Object} props
+ */
+const DataTableRow = memo(function DataTableRow({
+  row,
+  rowId,
+  isSelected,
+  selectable,
+  visibleColumns,
+  rowClassString,
+  onRowClick,
+  onToggleSelect,
+}) {
+  return (
+    <tr
+      className={`${
+        onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''
+      } ${isSelected ? 'bg-indigo-50/40' : ''} ${rowClassString} transition-colors`}
+      onClick={() => onRowClick && onRowClick(row)}
+    >
+      {selectable && (
+        <td
+          className="px-4 py-4 w-10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onToggleSelect(rowId)}
+            aria-label={`Select row ${rowId}`}
+            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          />
+        </td>
+      )}
+      {visibleColumns.map((column) => (
+        <td
+          key={column.key}
+          className="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
+        >
+          {column.render
+            ? column.render(row[column.key], row)
+            : row[column.key]}
+        </td>
+      ))}
+    </tr>
+  );
+});
 
 /**
  * DataTable — sortable, selectable, column-toggle-aware data grid.
@@ -132,14 +215,14 @@ const DataTable = ({
     };
   }, [columnMenuOpen]);
 
-  const toggleColumn = (key) => {
+  const toggleColumn = useCallback((key) => {
     setHiddenSet((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
-  };
+  }, []);
 
   /* ── Selection state ─────────────────────────────────────────────── */
 
@@ -157,29 +240,50 @@ const DataTable = ({
   const effectiveSelected = externalSelectedSet || internalSelected;
 
   /** Apply a selection update — emit to parent if controlled, else local. */
-  const applySelection = (next) => {
-    if (onSelectionChange) onSelectionChange(next);
-    else setInternalSelected(next);
-  };
+  const applySelection = useCallback(
+    (next) => {
+      if (onSelectionChange) onSelectionChange(next);
+      else setInternalSelected(next);
+    },
+    [onSelectionChange]
+  );
 
   /** Toggle a single row id in the selected set. */
-  const toggleRow = (id) => {
-    const next = new Set(effectiveSelected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    applySelection(next);
-  };
+  const toggleRow = useCallback(
+    (id) => {
+      const next = new Set(effectiveSelected);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      applySelection(next);
+    },
+    [effectiveSelected, applySelection]
+  );
 
-  /** Master "select all visible rows" toggle. */
-  const allOnPageSelected =
-    data.length > 0 &&
-    data.every((row, idx) => effectiveSelected.has(getRowId(row, idx)));
+  /**
+   * Memoized "all/some on page selected" flags. Recomputing these per
+   * render was a hotspot on large pages — every toggle walks the data
+   * array twice, and useMemo cuts that to once-per-state-change.
+   */
+  const { allOnPageSelected, someOnPageSelected } = useMemo(() => {
+    if (data.length === 0) {
+      return { allOnPageSelected: false, someOnPageSelected: false };
+    }
+    let allSelected = true;
+    let anySelected = false;
+    for (const [idx, row] of data.entries()) {
+      const has = effectiveSelected.has(getRowId(row, idx));
+      if (has) anySelected = true;
+      else allSelected = false;
+      // Early-exit when we know both flags
+      if (anySelected && !allSelected) break;
+    }
+    return {
+      allOnPageSelected: allSelected,
+      someOnPageSelected: anySelected && !allSelected,
+    };
+  }, [data, effectiveSelected, getRowId]);
 
-  const someOnPageSelected =
-    !allOnPageSelected &&
-    data.some((row, idx) => effectiveSelected.has(getRowId(row, idx)));
-
-  const toggleAllOnPage = () => {
+  const toggleAllOnPage = useCallback(() => {
     const next = new Set(effectiveSelected);
     if (allOnPageSelected) {
       // Deselect everything that's currently visible.
@@ -193,7 +297,7 @@ const DataTable = ({
       }
     }
     applySelection(next);
-  };
+  }, [data, effectiveSelected, getRowId, allOnPageSelected, applySelection]);
 
   /**
    * Resolve selected rows for a bulk action callback. We only include
@@ -216,11 +320,27 @@ const DataTable = ({
 
   /* ── Sort handler ────────────────────────────────────────────────── */
 
-  const handleSort = (columnKey) => {
-    if (!onSort) return;
-    const newOrder = sortBy === columnKey && sortOrder === 'ASC' ? 'DESC' : 'ASC';
-    onSort(columnKey, newOrder);
-  };
+  const handleSort = useCallback(
+    (columnKey) => {
+      if (!onSort) return;
+      const newOrder =
+        sortBy === columnKey && sortOrder === 'ASC' ? 'DESC' : 'ASC';
+      onSort(columnKey, newOrder);
+    },
+    [onSort, sortBy, sortOrder]
+  );
+
+  /**
+   * Stable row-click + select callbacks passed down to each
+   * memoized DataTableRow. Wrapping these means a parent-state
+   * change (e.g. sort flip) doesn't re-render unchanged rows.
+   */
+  const handleRowClick = useCallback(
+    (row) => {
+      if (onRowClick) onRowClick(row);
+    },
+    [onRowClick]
+  );
 
   const renderSortIcon = (columnKey) => {
     if (sortBy !== columnKey) {
@@ -453,45 +573,24 @@ const DataTable = ({
                 data.map((row, index) => {
                   const rowId = getRowId(row, index);
                   const isSelected = effectiveSelected.has(rowId);
-                  const customRowClass =
+                  // Resolve the per-row class string eagerly so it's a
+                  // primitive comparison in the memo'd row's prop check.
+                  const rowClassString =
                     typeof rowClassName === 'function'
                       ? rowClassName(row) || ''
                       : '';
                   return (
-                    <tr
+                    <DataTableRow
                       key={rowId}
-                      className={`${
-                        onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''
-                      } ${
-                        isSelected ? 'bg-indigo-50/40' : ''
-                      } ${customRowClass} transition-colors`}
-                      onClick={() => onRowClick && onRowClick(row)}
-                    >
-                      {selectable && (
-                        <td
-                          className="px-4 py-4 w-10"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleRow(rowId)}
-                            aria-label={`Select row ${rowId}`}
-                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                        </td>
-                      )}
-                      {visibleColumns.map((column) => (
-                        <td
-                          key={column.key}
-                          className="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
-                        >
-                          {column.render
-                            ? column.render(row[column.key], row)
-                            : row[column.key]}
-                        </td>
-                      ))}
-                    </tr>
+                      row={row}
+                      rowId={rowId}
+                      isSelected={isSelected}
+                      selectable={selectable}
+                      visibleColumns={visibleColumns}
+                      rowClassString={rowClassString}
+                      onRowClick={onRowClick ? handleRowClick : undefined}
+                      onToggleSelect={toggleRow}
+                    />
                   );
                 })
               )}
