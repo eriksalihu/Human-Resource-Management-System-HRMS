@@ -2,10 +2,11 @@
  * @file frontend/src/App.jsx
  * @description Root application component — wraps the route tree with
  *   ThemeProvider / AuthProvider / NotificationProvider, code-splits page
- *   modules via React.lazy, surrounds the tree with a top-level
- *   ErrorBoundary, and adds per-page boundaries so a single page crash
- *   doesn't take down the navbar / sidebar / sibling routes
- * @author Dev A
+ *   modules via React.lazy with per-route Suspense boundaries, surrounds
+ *   the tree with a top-level ErrorBoundary, and adds per-page boundaries
+ *   so a single page crash doesn't take down the navbar / sidebar /
+ *   sibling routes
+ * @author Dev A (original boundaries), Dev B (per-route Suspense + preload)
  *
  * Two layers of error boundaries:
  *   - **App-level** (outermost) — last line of defense. Catches errors
@@ -17,6 +18,19 @@
  *     usable; only the affected page renders the fallback. Resets
  *     automatically when the user navigates to a different route via
  *     `resetKey={location.pathname}`.
+ *
+ * v2 (commit 228 — Dev B) moves the Suspense boundary from above
+ * `<Routes>` down to each route's element. The benefit:
+ *   - Before: when ANY page chunk loaded, the full <Routes /> subtree
+ *     (including MainLayout) unmounted to show the global fallback.
+ *     Users saw the navbar + sidebar flash on every cold navigation.
+ *   - After: only the page's content area suspends. MainLayout stays
+ *     mounted, the sidebar keeps your nav state, and the fallback
+ *     renders inline where the page content would appear.
+ *
+ * Lazy modules are wrapped in `lazyWithPreload`, which attaches a
+ * `.preload()` method so future commits (Sidebar hover, link focus,
+ * idle prefetch) can warm the chunk before the user clicks.
  */
 
 import { lazy, Suspense } from 'react';
@@ -45,28 +59,60 @@ import NotFoundPage from './pages/NotFoundPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 
 /**
- * Authenticated pages are code-split via React.lazy. Each chunk only
- * loads when the user navigates to that page, keeping the initial bundle
- * small. The Suspense fallback below covers the loading state for any
- * unloaded chunk.
+ * `lazyWithPreload` — `React.lazy` plus a `.preload()` method.
+ *
+ * Calling `.preload()` triggers the import without rendering the
+ * component. This is the hook future link / sidebar commits will use:
+ *
+ *   <Link
+ *     to="/employees"
+ *     onPointerEnter={() => EmployeesPage.preload()}
+ *     onFocus={() => EmployeesPage.preload()}
+ *   />
+ *
+ * Multiple calls to preload() return the same cached promise — the
+ * underlying dynamic import is memoized by the bundler, so calling
+ * preload() liberally is cheap. We attach `.preload` directly onto the
+ * lazy component so consumers don't need to import a separate registry.
+ *
+ * @param {() => Promise<{ default: React.ComponentType }>} loader
+ * @returns {React.LazyExoticComponent & { preload: () => Promise<*> }}
  */
-const DashboardPage = lazy(() => import('./pages/DashboardPage'));
-const DepartmentsPage = lazy(() => import('./pages/DepartmentsPage'));
-const EmployeesPage = lazy(() => import('./pages/EmployeesPage'));
-const PositionsPage = lazy(() => import('./pages/PositionsPage'));
-const AttendancePage = lazy(() => import('./pages/AttendancePage'));
-const LeavesPage = lazy(() => import('./pages/LeavesPage'));
-const SalariesPage = lazy(() => import('./pages/SalariesPage'));
-const TrainingsPage = lazy(() => import('./pages/TrainingsPage'));
-const PerformancePage = lazy(() => import('./pages/PerformancePage'));
-const DocumentsPage = lazy(() => import('./pages/DocumentsPage'));
-const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
-const UsersPage = lazy(() => import('./pages/UsersPage'));
-const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const lazyWithPreload = (loader) => {
+  const Component = lazy(loader);
+  Component.preload = loader;
+  return Component;
+};
+
+/**
+ * Authenticated pages are code-split. Each chunk only loads when the
+ * user navigates to that page (or pre-emptively if a Sidebar link is
+ * hovered). The Suspense fallback on each Route handles the loading
+ * state without unmounting MainLayout.
+ *
+ * The /* @vite-ignore *\/ marker keeps Vite's static analyzer from
+ * warning on intentionally-dynamic imports. Each `import()` here is
+ * static, so chunk-naming + tree-shaking work normally.
+ */
+const DashboardPage = lazyWithPreload(() => import('./pages/DashboardPage'));
+const DepartmentsPage = lazyWithPreload(() => import('./pages/DepartmentsPage'));
+const EmployeesPage = lazyWithPreload(() => import('./pages/EmployeesPage'));
+const PositionsPage = lazyWithPreload(() => import('./pages/PositionsPage'));
+const AttendancePage = lazyWithPreload(() => import('./pages/AttendancePage'));
+const LeavesPage = lazyWithPreload(() => import('./pages/LeavesPage'));
+const SalariesPage = lazyWithPreload(() => import('./pages/SalariesPage'));
+const TrainingsPage = lazyWithPreload(() => import('./pages/TrainingsPage'));
+const PerformancePage = lazyWithPreload(() => import('./pages/PerformancePage'));
+const DocumentsPage = lazyWithPreload(() => import('./pages/DocumentsPage'));
+const NotificationsPage = lazyWithPreload(() => import('./pages/NotificationsPage'));
+const UsersPage = lazyWithPreload(() => import('./pages/UsersPage'));
+const ProfilePage = lazyWithPreload(() => import('./pages/ProfilePage'));
 
 /**
  * Suspense fallback shown while a lazy route module loads. Centred so it
- * looks intentional even on a large viewport.
+ * looks intentional even on a large viewport. The fallback now renders
+ * INSIDE MainLayout so it occupies only the content area — the sidebar
+ * and navbar remain visible and usable.
  */
 const RouteFallback = () => (
   <div className="flex items-center justify-center py-20">
@@ -75,15 +121,19 @@ const RouteFallback = () => (
 );
 
 /**
- * RouteErrorBoundary — wraps a single page so a render crash doesn't
- * unmount the layout chrome. Auto-resets on route change so navigating
- * away from a broken page clears the error without manual intervention.
+ * LazyRoute — wraps a page in both an ErrorBoundary (auto-reset on
+ * navigation) AND a Suspense boundary (per-route, so chunk loads don't
+ * unmount the surrounding layout).
+ *
+ * The Suspense sits INSIDE the ErrorBoundary so chunk-load failures
+ * (network errors during dynamic import) surface as a page error
+ * rather than an unhandled promise rejection.
  *
  * @param {Object} props
- * @param {string} props.name - Used in the boundary's log line for triage
+ * @param {string} props.name - Used in error log lines for triage
  * @param {React.ReactNode} props.children
  */
-const RouteErrorBoundary = ({ name, children }) => {
+const LazyRoute = ({ name, children }) => {
   const location = useLocation();
   return (
     <ErrorBoundary
@@ -92,7 +142,7 @@ const RouteErrorBoundary = ({ name, children }) => {
       title="This page hit an error"
       hideReload
     >
-      {children}
+      <Suspense fallback={<RouteFallback />}>{children}</Suspense>
     </ErrorBoundary>
   );
 };
@@ -116,167 +166,165 @@ function App() {
         <ThemeProvider>
           <AuthProvider>
             <NotificationProvider>
-              <Suspense fallback={<RouteFallback />}>
-                <Routes>
-                  {/* Public auth routes */}
-                  <Route element={<AuthLayout />}>
-                    <Route
-                      path="/login"
-                      element={
-                        <RouteErrorBoundary name="login">
-                          <LoginPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/register"
-                      element={
-                        <RouteErrorBoundary name="register">
-                          <RegisterPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                  </Route>
-
-                  {/* Protected routes inside MainLayout */}
+              <Routes>
+                {/* Public auth routes */}
+                <Route element={<AuthLayout />}>
                   <Route
+                    path="/login"
                     element={
-                      <ProtectedRoute>
-                        <MainLayout />
+                      <LazyRoute name="login">
+                        <LoginPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/register"
+                    element={
+                      <LazyRoute name="register">
+                        <RegisterPage />
+                      </LazyRoute>
+                    }
+                  />
+                </Route>
+
+                {/* Protected routes inside MainLayout */}
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <MainLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route
+                    path="/"
+                    element={
+                      <LazyRoute name="dashboard">
+                        <DashboardPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <LazyRoute name="dashboard">
+                        <DashboardPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/departments"
+                    element={
+                      <LazyRoute name="departments">
+                        <DepartmentsPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/employees"
+                    element={
+                      <LazyRoute name="employees">
+                        <EmployeesPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/positions"
+                    element={
+                      <LazyRoute name="positions">
+                        <PositionsPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/attendance"
+                    element={
+                      <LazyRoute name="attendance">
+                        <AttendancePage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/leaves"
+                    element={
+                      <LazyRoute name="leaves">
+                        <LeavesPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/leave-requests"
+                    element={
+                      <LazyRoute name="leaves">
+                        <LeavesPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/salaries"
+                    element={
+                      <LazyRoute name="salaries">
+                        <SalariesPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/trainings"
+                    element={
+                      <LazyRoute name="trainings">
+                        <TrainingsPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/performance"
+                    element={
+                      <LazyRoute name="performance">
+                        <PerformancePage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/documents"
+                    element={
+                      <LazyRoute name="documents">
+                        <DocumentsPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/notifications"
+                    element={
+                      <LazyRoute name="notifications">
+                        <NotificationsPage />
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/profile"
+                    element={
+                      <LazyRoute name="profile">
+                        <ProfilePage />
+                      </LazyRoute>
+                    }
+                  />
+
+                  {/* Admin-only routes */}
+                  <Route
+                    path="/users"
+                    element={
+                      <ProtectedRoute requiredRoles={['Admin']}>
+                        <LazyRoute name="users">
+                          <UsersPage />
+                        </LazyRoute>
                       </ProtectedRoute>
                     }
-                  >
-                    <Route
-                      path="/"
-                      element={
-                        <RouteErrorBoundary name="dashboard">
-                          <DashboardPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/dashboard"
-                      element={
-                        <RouteErrorBoundary name="dashboard">
-                          <DashboardPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/departments"
-                      element={
-                        <RouteErrorBoundary name="departments">
-                          <DepartmentsPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/employees"
-                      element={
-                        <RouteErrorBoundary name="employees">
-                          <EmployeesPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/positions"
-                      element={
-                        <RouteErrorBoundary name="positions">
-                          <PositionsPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/attendance"
-                      element={
-                        <RouteErrorBoundary name="attendance">
-                          <AttendancePage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/leaves"
-                      element={
-                        <RouteErrorBoundary name="leaves">
-                          <LeavesPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/leave-requests"
-                      element={
-                        <RouteErrorBoundary name="leaves">
-                          <LeavesPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/salaries"
-                      element={
-                        <RouteErrorBoundary name="salaries">
-                          <SalariesPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/trainings"
-                      element={
-                        <RouteErrorBoundary name="trainings">
-                          <TrainingsPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/performance"
-                      element={
-                        <RouteErrorBoundary name="performance">
-                          <PerformancePage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/documents"
-                      element={
-                        <RouteErrorBoundary name="documents">
-                          <DocumentsPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/notifications"
-                      element={
-                        <RouteErrorBoundary name="notifications">
-                          <NotificationsPage />
-                        </RouteErrorBoundary>
-                      }
-                    />
-                    <Route
-                      path="/profile"
-                      element={
-                        <RouteErrorBoundary name="profile">
-                          <ProfilePage />
-                        </RouteErrorBoundary>
-                      }
-                    />
+                  />
+                </Route>
 
-                    {/* Admin-only routes */}
-                    <Route
-                      path="/users"
-                      element={
-                        <ProtectedRoute requiredRoles={['Admin']}>
-                          <RouteErrorBoundary name="users">
-                            <UsersPage />
-                          </RouteErrorBoundary>
-                        </ProtectedRoute>
-                      }
-                    />
-                  </Route>
-
-                  {/* Error pages */}
-                  <Route path="/unauthorized" element={<UnauthorizedPage />} />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Routes>
-              </Suspense>
+                {/* Error pages */}
+                <Route path="/unauthorized" element={<UnauthorizedPage />} />
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
             </NotificationProvider>
           </AuthProvider>
         </ThemeProvider>
@@ -284,5 +332,26 @@ function App() {
     </ErrorBoundary>
   );
 }
+
+/**
+ * Re-export the lazy page components so other modules (Sidebar, command
+ * palette, idle prefetcher, etc.) can call `.preload()` on them without
+ * duplicating the import map.
+ */
+export const lazyPages = {
+  DashboardPage,
+  DepartmentsPage,
+  EmployeesPage,
+  PositionsPage,
+  AttendancePage,
+  LeavesPage,
+  SalariesPage,
+  TrainingsPage,
+  PerformancePage,
+  DocumentsPage,
+  NotificationsPage,
+  UsersPage,
+  ProfilePage,
+};
 
 export default App;
