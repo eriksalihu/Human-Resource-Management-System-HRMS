@@ -15,8 +15,37 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import * as dashboardApi from '../../api/dashboardApi';
-import LoadingSpinner from '../common/LoadingSpinner';
 import { useToast } from '../common/Toast';
+
+/**
+ * Timeline-shaped skeleton — N rows each with a circular icon
+ * placeholder, two-line text bars, and a rail-anchored dot. Mirrors
+ * the real layout so swap-in is jank-free.
+ *
+ * @param {Object} props
+ * @param {number} [props.rows=5]
+ */
+const RecentActivitiesSkeleton = ({ rows = 5 }) => (
+  <ul
+    className="relative animate-pulse"
+    aria-busy="true"
+    aria-label="Loading recent activities"
+  >
+    <span
+      aria-hidden="true"
+      className="absolute left-[19px] top-2 bottom-2 w-px bg-gray-200"
+    />
+    {Array.from({ length: rows }).map((_, i) => (
+      <li key={i} className="relative flex gap-3 py-3">
+        <span className="relative z-10 h-9 w-9 shrink-0 rounded-full bg-gray-200" />
+        <div className="flex-1 min-w-0 space-y-1.5 pt-1">
+          <div className="h-3 w-3/4 rounded bg-gray-200" />
+          <div className="h-2 w-1/3 rounded bg-gray-100" />
+        </div>
+      </li>
+    ))}
+  </ul>
+);
 
 /**
  * Map (verb, entity) → { label, tone, dot, link }. Falls back to a generic
@@ -227,9 +256,7 @@ const RecentActivities = ({
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-8">
-          <LoadingSpinner />
-        </div>
+        <RecentActivitiesSkeleton rows={5} />
       ) : rows.length === 0 ? (
         <div className="text-center py-8 text-sm text-gray-500">
           No recent activity yet — actions across the system will show up here.

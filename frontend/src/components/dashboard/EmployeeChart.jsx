@@ -11,7 +11,47 @@
  */
 
 import { useMemo, useRef, useState, useLayoutEffect } from 'react';
-import LoadingSpinner from '../common/LoadingSpinner';
+
+/**
+ * Inline bar-chart skeleton. Matches the chart's real footprint so the
+ * widget reserves layout space and the page doesn't shift when data
+ * arrives. Bar heights are deterministic per index so re-renders don't
+ * cause the placeholder to twitch.
+ *
+ * @param {Object} props
+ * @param {number} props.height - Match the chart's `height` prop
+ * @returns {JSX.Element}
+ */
+const ChartSkeleton = ({ height }) => {
+  const bars = [56, 78, 42, 90, 64, 32, 70, 50];
+  return (
+    <div
+      className="relative animate-pulse"
+      style={{ height: `${height}px` }}
+      aria-busy="true"
+      aria-label="Loading chart"
+    >
+      {/* X-axis */}
+      <div className="absolute bottom-6 left-0 right-0 h-px bg-gray-200" />
+      {/* Bars */}
+      <div className="absolute inset-x-0 bottom-7 top-2 flex items-end justify-around gap-2 px-2">
+        {bars.map((pct, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-t bg-gradient-to-t from-gray-200 to-gray-100"
+            style={{ height: `${pct}%` }}
+          />
+        ))}
+      </div>
+      {/* X-axis labels */}
+      <div className="absolute bottom-0 left-0 right-0 flex justify-around gap-2 px-2">
+        {bars.map((_, i) => (
+          <div key={i} className="h-2 w-8 rounded bg-gray-100" />
+        ))}
+      </div>
+    </div>
+  );
+};
 
 /**
  * Department color palette. Cycled positionally — once you exceed
@@ -153,12 +193,7 @@ const EmployeeChart = ({
 
       <div ref={wrapperRef} className="relative">
         {loading ? (
-          <div
-            className="flex justify-center items-center"
-            style={{ height: `${height}px` }}
-          >
-            <LoadingSpinner />
-          </div>
+          <ChartSkeleton height={height} />
         ) : data.length === 0 ? (
           <div
             className="flex flex-col justify-center items-center text-center text-sm text-gray-500"

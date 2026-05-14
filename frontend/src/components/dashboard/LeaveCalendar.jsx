@@ -17,9 +17,52 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as leaveRequestApi from '../../api/leaveRequestApi';
-import LoadingSpinner from '../common/LoadingSpinner';
 import { useToast } from '../common/Toast';
 import useAuth from '../../hooks/useAuth';
+
+/**
+ * Layout-matched calendar skeleton — 6×7 grid of day cells plus a short
+ * upcoming-list placeholder. Reserves the widget's footprint so the
+ * dashboard doesn't shift when data arrives.
+ */
+const LeaveCalendarSkeleton = () => (
+  <div
+    className="animate-pulse space-y-3"
+    aria-busy="true"
+    aria-label="Loading leave calendar"
+  >
+    {/* Weekday row */}
+    <div className="grid grid-cols-7 gap-1">
+      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+        <div key={i} className="h-3 rounded bg-gray-100" />
+      ))}
+    </div>
+    {/* Day cells */}
+    <div className="grid grid-cols-7 gap-1">
+      {Array.from({ length: 42 }).map((_, i) => (
+        <div
+          key={i}
+          className="aspect-square rounded bg-gray-100 flex items-center justify-center"
+        >
+          {/* Random-ish dots so it doesn't look uniform */}
+          {(i * 7) % 11 === 0 && (
+            <span className="h-1.5 w-1.5 rounded-full bg-gray-300" />
+          )}
+        </div>
+      ))}
+    </div>
+    {/* "Upcoming" list */}
+    <div className="pt-3 mt-3 border-t border-gray-100 space-y-2">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-gray-200" />
+          <div className="h-3 flex-1 rounded bg-gray-100" />
+          <div className="h-3 w-16 rounded bg-gray-100" />
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 /** Roles that get the org-wide view (everyone else sees their own). */
 const HR_ROLES = ['Admin', 'HR Manager', 'Department Manager'];
@@ -282,9 +325,7 @@ const LeaveCalendar = ({
 
       {/* Body */}
       {loading ? (
-        <div className="flex justify-center items-center py-8">
-          <LoadingSpinner />
-        </div>
+        <LeaveCalendarSkeleton />
       ) : (
         <>
           {/* Weekday header */}

@@ -10,7 +10,44 @@
  */
 
 import { useMemo } from 'react';
-import LoadingSpinner from '../common/LoadingSpinner';
+
+/**
+ * Layout-matched skeleton for the attendance breakdown — 5 status rows
+ * each with a colored-dot + bar placeholder. Sized to the real widget
+ * footprint so the dashboard doesn't shift when data arrives.
+ */
+const AttendanceSummarySkeleton = () => (
+  <div
+    className="space-y-2.5 animate-pulse"
+    aria-busy="true"
+    aria-label="Loading attendance summary"
+  >
+    {[0, 1, 2, 3, 4].map((i) => (
+      <div key={i} className="space-y-1">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-gray-200" />
+            <span className="h-3 w-20 rounded bg-gray-200" />
+          </div>
+          <span className="h-3 w-10 rounded bg-gray-200" />
+        </div>
+        <div className="h-1.5 rounded bg-gray-100" />
+      </div>
+    ))}
+    {/* Optional check-ins placeholder so the area doesn't expand later */}
+    <div className="pt-3 mt-3 border-t border-gray-100 space-y-2">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="flex items-center gap-3">
+          <div className="h-7 w-7 rounded-full bg-gray-200" />
+          <div className="flex-1 space-y-1">
+            <div className="h-3 w-32 bg-gray-200 rounded" />
+            <div className="h-2 w-20 bg-gray-100 rounded" />
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 /** Visual treatment per status — color tone + label. */
 const STATUS_META = [
@@ -139,9 +176,7 @@ const AttendanceSummary = ({
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-8">
-          <LoadingSpinner />
-        </div>
+        <AttendanceSummarySkeleton />
       ) : (
         <>
           {/* Status breakdown rows */}

@@ -10,7 +10,52 @@
  */
 
 import { useMemo, useState } from 'react';
-import LoadingSpinner from '../common/LoadingSpinner';
+
+/**
+ * Donut + side-list skeleton. Mirrors the widget's two-column layout so
+ * the page reserves space for it during the initial fetch and doesn't
+ * shift when data lands.
+ *
+ * @param {Object} props
+ * @param {number} props.size - Donut diameter in px (match the widget's SIZE)
+ * @returns {JSX.Element}
+ */
+const DepartmentOverviewSkeleton = ({ size = 180 }) => (
+  <div
+    className="grid grid-cols-1 lg:grid-cols-2 gap-5 animate-pulse"
+    aria-busy="true"
+    aria-label="Loading department overview"
+  >
+    {/* Donut placeholder */}
+    <div className="flex flex-col items-center">
+      <div
+        className="rounded-full bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200"
+        style={{
+          width: size,
+          height: size,
+          maskImage:
+            'radial-gradient(circle, transparent 40%, black 41%)',
+          WebkitMaskImage:
+            'radial-gradient(circle, transparent 40%, black 41%)',
+        }}
+      />
+      <div className="h-3 w-20 bg-gray-200 rounded mt-3" />
+    </div>
+    {/* Legend / top departments list placeholder */}
+    <div className="space-y-3">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-md bg-gray-200" />
+          <div className="flex-1 space-y-1.5">
+            <div className="h-3 w-2/3 bg-gray-200 rounded" />
+            <div className="h-2 w-1/2 bg-gray-100 rounded" />
+          </div>
+          <div className="h-3 w-10 bg-gray-200 rounded" />
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 /** Reuses the same palette as EmployeeChart so colors stay consistent. */
 const COLORS = [
@@ -163,9 +208,7 @@ const DepartmentOverview = ({
       </div>
 
       {loading ? (
-        <div className="flex justify-center items-center py-10">
-          <LoadingSpinner />
-        </div>
+        <DepartmentOverviewSkeleton size={SIZE} />
       ) : view.total === 0 ? (
         <div className="text-center py-10 text-sm text-gray-500">
           No active employees yet — once seeded, this widget will show
