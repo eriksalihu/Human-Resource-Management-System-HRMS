@@ -1,10 +1,47 @@
 /**
  * @file frontend/src/components/common/Sidebar.jsx
- * @description Collapsible sidebar navigation with dark-mode support, smooth collapse animation, and active route indicator
- * @author Dev B
+ * @description Responsive collapsible sidebar with dark-mode support,
+ *   smooth animations, mobile overlay vs desktop push behavior, and
+ *   swipe-to-close touch gestures on mobile.
+ * @author Dev B (original), Dev A (responsive transforms + gestures)
+ *
+ * Two presentations driven by the `lg` breakpoint (≥ 1024px):
+ *
+ *   • **Mobile / tablet** (< lg): the sidebar is a fixed-position
+ *     OVERLAY. Animates via `translateX` so it slides in from the
+ *     left edge and over the page content. A swipe-left touch
+ *     gesture dismisses the overlay (calls `onClose`).
+ *
+ *   • **Desktop** (≥ lg): the sidebar is a PUSH panel — the main
+ *     content takes its left-margin from the sidebar's width, so the
+ *     animation is on the `width` property collapsing to 0.
+ *
+ * Both presentations live on one element through breakpoint-prefixed
+ * Tailwind utilities — no JS branch on viewport size for the layout
+ * itself. The only JS that needs the viewport is the touch-gesture
+ * handler, which is mobile-only by design.
+ *
+ * Touch gesture math:
+ *   - Capture `touchstart` X coordinate
+ *   - On `touchmove`, follow the finger with `translateX` (clamped to
+ *     ≤ 0) so the slide feels responsive instead of stiff
+ *   - On `touchend`, fire `onClose` when the finger travelled more
+ *     than `SWIPE_CLOSE_THRESHOLD_PX` to the left OR the gesture's
+ *     horizontal velocity exceeded `SWIPE_VELOCITY_THRESHOLD_PX_MS`.
+ *     Otherwise snap back open.
  */
 
+import { useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
+
+/** Distance in px the finger must travel left to count as a close-swipe. */
+const SWIPE_CLOSE_THRESHOLD_PX = 60;
+
+/** Velocity (px/ms) above which even a short swipe counts as a close. */
+const SWIPE_VELOCITY_THRESHOLD_PX_MS = 0.4;
+
+/** Tailwind `lg` breakpoint — kept in JS for the touch-gesture gate. */
+const LG_BREAKPOINT_PX = 1024;
 
 /**
  * Navigation items for the sidebar menu.
@@ -69,33 +106,121 @@ const navItems = [
 ];
 
 /**
- * Sidebar - Collapsible navigation sidebar component.
- *
- * Visual treatment:
- *   - Smooth width transition (`transition-[width]` over 300ms with
- *     ease-in-out) for the collapse animation
- *   - Inner content fades / shifts via `opacity` + `pointer-events-none`
- *     when collapsed so labels don't bleed during the animation
- *   - Tailwind `dark:` variants for every visible color (background,
- *     text, hover, ring, active state)
- *   - Active route gets a left-edge accent rail in addition to the
- *     existing colored background, making the current page obvious at
- *     a glance even on small displays
+ * Sidebar — responsive collapsible navigation.
  *
  * @param {Object} props
  * @param {boolean} props.isOpen - Whether the sidebar is expanded
+ * @param {Function} [props.onClose] - Called when the user dismisses the
+ *   overlay via swipe-left gesture. Required for mobile UX; if omitted
+ *   the gesture is detected but produces no action.
  * @returns {JSX.Element}
  */
-const Sidebar = ({ isOpen }) => {
+const Sidebar = ({ isOpen, onClose }) => {
+  /**
+   * Drag offset (px, negative-only) — follows the finger during a swipe
+   * so the slide feels responsive. Resets to 0 after touchend.
+   */
+  const [dragX, setDragX] = useState(0);
+
+  /** Whether a touch gesture is currently in progress. */
+  const dragRef = useRef(null);
+
+  /**
+   * Touch handlers — only meaningful on viewports < lg. We still attach
+   * them universally because touchscreen laptops exist; the size check
+   * prevents desktops from acting on a stylus tap.
+   */
+  const onTouchStart = (e) => {
+    if (!isOpen) return;
+    if (typeof window !== 'undefined' && window.innerWidth >= LG_BREAKPOINT_PX) {
+      return; // Desktop — push mode doesn't need swipe to dismiss.
+    }
+    const touch = e.touches[0];
+    if (!touch) return;
+    dragRef.current = {
+      startX: touch.clientX,
+      startedAt: Date.now(),
+      currentX: touch.clientX,
+    };
+  };
+
+  const onTouchMove = (e) => {
+    if (!dragRef.current) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    dragRef.current.currentX = touch.clientX;
+    // Clamp to ≤ 0 so the user can't drag the sidebar past its open
+    // resting position (would feel buggy).
+    const delta = Math.min(0, touch.clientX - dragRef.current.startX);
+    setDragX(delta);
+  };
+
+  const onTouchEnd = () => {
+    if (!dragRef.current) return;
+    const drag = dragRef.current;
+    dragRef.current = null;
+
+    const distance = drag.currentX - drag.startX; // negative on left swipe
+    const elapsedMs = Math.max(1, Date.now() - drag.startedAt);
+    const velocity = Math.abs(distance) / elapsedMs;
+
+    const traveledFarEnough = -distance > SWIPE_CLOSE_THRESHOLD_PX;
+    const fastEnough = velocity > SWIPE_VELOCITY_THRESHOLD_PX_MS;
+
+    setDragX(0);
+    if ((traveledFarEnough || fastEnough) && distance < 0) {
+      onClose?.();
+    }
+  };
+
+  /** If `isOpen` flips while a drag is in progress, abort the drag. */
+  useEffect(() => {
+    if (!isOpen) {
+      dragRef.current = null;
+      setDragX(0);
+    }
+  }, [isOpen]);
+
+  // Inline style for the live drag offset. Only applied while a touch
+  // gesture is active; otherwise the CSS classes handle the transform.
+  const dragStyle =
+    dragX < 0 && isOpen
+      ? {
+          // Disable the CSS transition during a live drag so the
+          // sidebar follows the finger 1:1. Re-enabled on touchend.
+          transition: 'none',
+          transform: `translateX(${dragX}px)`,
+        }
+      : undefined;
+
   return (
     <aside
       aria-label="Main navigation"
       aria-hidden={!isOpen}
-      className={`fixed left-0 top-16 bottom-0 z-20 min-h-[calc(100vh-4rem)] overflow-hidden border-r transition-[width] duration-300 ease-in-out
-        ${isOpen ? 'w-64' : 'w-0'}
-        bg-white border-gray-200
-        dark:bg-gray-900 dark:border-gray-800`}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
+      style={dragStyle}
+      className={`
+        fixed left-0 top-16 bottom-0 z-20 w-64
+        overflow-hidden border-r
+        bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-800
+        will-change-transform
+        transition-[transform,width] duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+        lg:translate-x-0
+        ${isOpen ? 'lg:w-64' : 'lg:w-0'}
+        shadow-xl lg:shadow-none
+      `}
     >
+      {/* Visual swipe affordance — a thin handle indicator visible only
+          on touch devices, hints that the sidebar can be swiped away */}
+      <span
+        aria-hidden="true"
+        className="absolute right-1 top-1/2 -translate-y-1/2 h-12 w-1 rounded-full bg-gray-300/40 dark:bg-gray-600/40 lg:hidden"
+      />
+
       <div
         className={`p-4 transition-opacity duration-200 ${
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'

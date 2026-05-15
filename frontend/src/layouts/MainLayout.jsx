@@ -98,8 +98,10 @@ const MainLayout = () => {
 
       {/* Layout body — sidebar (fixed) + main column */}
       <div className="flex flex-1 pt-16">
-        {/* Sidebar — fixed-position, left-edge, sized by inner state */}
-        <Sidebar isOpen={sidebarOpen} />
+        {/* Sidebar — fixed-position, left-edge, sized by inner state.
+            `onClose` is wired so a left-swipe gesture on mobile can
+            dismiss the overlay without going through the backdrop. */}
+        <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
 
         {/* Main column: content + footer. Margin shifts on lg when sidebar
             is open; on smaller screens the sidebar overlays so margin stays 0. */}
