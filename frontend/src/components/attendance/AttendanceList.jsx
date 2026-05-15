@@ -614,7 +614,7 @@ const AttendanceList = ({
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — switches to a stacked card layout on mobile. */}
       <DataTable
         columns={columns}
         data={decoratedRows}
@@ -625,6 +625,7 @@ const AttendanceList = ({
         onRowClick={onView ? (row) => onView(row) : undefined}
         rowClassName={(row) => row._rowClassName}
         emptyMessage="No attendance records found"
+        cardOnMobile
       />
 
       {/* Pagination */}

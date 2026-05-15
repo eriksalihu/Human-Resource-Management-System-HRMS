@@ -1002,6 +1002,7 @@ const EmployeeList = ({ onAdd, onEdit, onView }) => {
           onSort={handleSort}
           onRowClick={onView ? (row) => onView(row) : undefined}
           emptyMessage="No employees found"
+          cardOnMobile
         />
       )}
 

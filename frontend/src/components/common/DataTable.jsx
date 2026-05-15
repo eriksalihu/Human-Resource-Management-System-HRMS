@@ -25,6 +25,23 @@
  *                                        in localStorage under this key
  *   - `rowClassName(row): string`      — pass-through for row tinting
  *                                        (e.g. AttendanceList's late/absent)
+ *   - `cardOnMobile: boolean`          — when true, table is hidden
+ *                                        below `md` and rows render
+ *                                        as stacked cards (label/value
+ *                                        pairs per column)
+ *
+ * v4 (commit 241 — Dev B) adds an opt-in CARD mode for narrow
+ * viewports. When `cardOnMobile` is true the table is hidden below the
+ * `md` breakpoint and each row renders as a stacked card — every
+ * visible column becomes a `LABEL: value` row, columns without a label
+ * (avatars, status badges, etc.) sit at the top of the card, and an
+ * `actions` column slots into a divider footer.
+ *
+ * Existing consumers keep working unchanged — `cardOnMobile` defaults
+ * to `false` so the table-only behavior is preserved. Lists that opt
+ * in (EmployeeList, SalaryList, AttendanceList, LeaveRequestList) get
+ * a properly mobile-readable layout instead of a horizontally-scrolling
+ * table on a phone.
  *
  * v3 (commit 232 — Dev B) adds rendering memoization so the table
  * stays responsive on large pages:
@@ -127,6 +144,117 @@ const DataTableRow = memo(function DataTableRow({
 });
 
 /**
+ * DataCard — single row rendered as a stacked card for mobile.
+ *
+ * Layout heuristic (column.label drives the slot):
+ *   - **No label** → rendered alone at the top of the card. Used by
+ *     avatar / status columns so they sit prominently rather than as a
+ *     boring "—: <icon>" label pair.
+ *   - **`actions` key** → rendered in a divider-separated footer slot.
+ *   - **Anything else** → label/value row in a 2-column grid.
+ *
+ * @param {Object} props
+ */
+const DataCard = memo(function DataCard({
+  row,
+  rowId,
+  isSelected,
+  selectable,
+  visibleColumns,
+  rowClassString,
+  onRowClick,
+  onToggleSelect,
+}) {
+  // Bucket columns by slot so we can render them in distinct sections.
+  const headerCols = [];
+  const fieldCols = [];
+  const actionsCol = visibleColumns.find((c) => c.key === 'actions');
+  for (const col of visibleColumns) {
+    if (col.key === 'actions') continue;
+    if (!col.label) headerCols.push(col);
+    else fieldCols.push(col);
+  }
+
+  return (
+    <div
+      className={`rounded-lg border shadow-sm p-3 transition-colors ${
+        isSelected
+          ? 'border-indigo-300 bg-indigo-50/40'
+          : 'border-gray-200 bg-white'
+      } ${onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''} ${rowClassString}`}
+      onClick={() => onRowClick && onRowClick(row)}
+      role={onRowClick ? 'button' : undefined}
+      tabIndex={onRowClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onRowClick && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onRowClick(row);
+        }
+      }}
+    >
+      {/* Header band — selection checkbox + no-label columns (avatar,
+          status, etc.) inline. */}
+      {(selectable || headerCols.length > 0) && (
+        <div className="flex items-center gap-3 mb-2">
+          {selectable && (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={(e) => {
+                e.stopPropagation();
+                onToggleSelect(rowId);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Select row ${rowId}`}
+              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 flex-shrink-0"
+            />
+          )}
+          {headerCols.map((column) => (
+            <div key={column.key} className="flex-shrink-0">
+              {column.render
+                ? column.render(row[column.key], row)
+                : row[column.key]}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Field rows — label / value grid. Each row is 1/3 label, 2/3 value
+          so longer values get the breathing room. */}
+      <dl className="space-y-1.5">
+        {fieldCols.map((column) => (
+          <div
+            key={column.key}
+            className="grid grid-cols-3 gap-2 text-sm items-baseline"
+          >
+            <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 col-span-1">
+              {column.label}
+            </dt>
+            <dd className="text-gray-800 col-span-2 break-words">
+              {column.render
+                ? column.render(row[column.key], row)
+                : (row[column.key] ?? '—')}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {/* Actions footer */}
+      {actionsCol && (
+        <div
+          className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-end"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {actionsCol.render
+            ? actionsCol.render(row[actionsCol.key], row)
+            : null}
+        </div>
+      )}
+    </div>
+  );
+});
+
+/**
  * DataTable — sortable, selectable, column-toggle-aware data grid.
  *
  * @param {Object} props
@@ -153,6 +281,9 @@ const DataTable = ({
   // Column visibility
   defaultHiddenColumns,
   storageKey,
+
+  // Responsive — render as stacked cards below `md` when true
+  cardOnMobile = false,
 }) => {
   /* ── Column visibility state ─────────────────────────────────────── */
 
@@ -504,7 +635,64 @@ const DataTable = ({
         </div>
       )}
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {/* Mobile card view — only when consumer opts in. Below `md` this
+          renders the dataset as a stack of cards; the table below this
+          block is hidden at the same breakpoint so users see one or the
+          other, never both. */}
+      {cardOnMobile && data.length > 0 && (
+        <div className="md:hidden space-y-3" role="list">
+          {data.map((row, index) => {
+            const rowId = getRowId(row, index);
+            const isSelected = effectiveSelected.has(rowId);
+            const rowClassString =
+              typeof rowClassName === 'function'
+                ? rowClassName(row) || ''
+                : '';
+            return (
+              <DataCard
+                key={rowId}
+                row={row}
+                rowId={rowId}
+                isSelected={isSelected}
+                selectable={selectable}
+                visibleColumns={visibleColumns}
+                rowClassString={rowClassString}
+                onRowClick={onRowClick ? handleRowClick : undefined}
+                onToggleSelect={toggleRow}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Empty state for card view (renders nothing when data has rows). */}
+      {cardOnMobile && data.length === 0 && (
+        <div className="md:hidden rounded-lg border border-gray-200 bg-white p-8 text-center">
+          <svg
+            className="mx-auto w-10 h-10 text-gray-300"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+            />
+          </svg>
+          <p className="mt-2 text-sm text-gray-500">{emptyMessage}</p>
+        </div>
+      )}
+
+      {/* Desktop / tablet table — wrapped in `overflow-x-auto` so it
+          horizontally scrolls on narrow viewports when card mode is off. */}
+      <div
+        className={`bg-white rounded-lg border border-gray-200 overflow-hidden ${
+          cardOnMobile ? 'hidden md:block' : ''
+        }`}
+      >
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             {/* Table header */}

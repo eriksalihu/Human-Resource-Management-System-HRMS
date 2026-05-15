@@ -530,7 +530,7 @@ const LeaveRequestList = ({
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — switches to a stacked card layout on mobile. */}
       <DataTable
         columns={columns}
         data={rows}
@@ -540,6 +540,7 @@ const LeaveRequestList = ({
         onSort={handleSort}
         onRowClick={onView ? (row) => onView(row) : undefined}
         emptyMessage="No leave requests found"
+        cardOnMobile
       />
 
       {/* Pagination */}

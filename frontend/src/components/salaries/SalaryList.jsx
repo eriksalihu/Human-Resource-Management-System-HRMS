@@ -605,7 +605,7 @@ const SalaryList = ({ onAdd, onEdit, onView }) => {
         </div>
       )}
 
-      {/* Data table */}
+      {/* Data table — switches to a stacked card layout on mobile. */}
       <DataTable
         columns={columns}
         data={salaries}
@@ -615,6 +615,7 @@ const SalaryList = ({ onAdd, onEdit, onView }) => {
         onSort={handleSort}
         onRowClick={onView ? (row) => onView(row) : undefined}
         emptyMessage="No salary records found"
+        cardOnMobile
       />
 
       {/* Pagination */}
