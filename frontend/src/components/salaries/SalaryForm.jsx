@@ -252,8 +252,8 @@ const SalaryForm = ({ initialData, onSubmit, onCancel, submitting = false }) => 
         )}
       </div>
 
-      {/* Period: month + year */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Period: month + year — stacked on mobile, side-by-side from sm. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label htmlFor="muaji" className="block text-sm font-medium text-gray-700">
             Month *
@@ -422,19 +422,19 @@ const SalaryForm = ({ initialData, onSubmit, onCancel, submitting = false }) => 
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
+      {/* Actions — stacked w/ Submit on top on mobile, row on sm+. */}
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-3 border-t border-gray-200">
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+          className="w-full sm:w-auto px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
           disabled={submitting}
         >
           Cancel
         </button>
         <button
           type="submit"
-          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           disabled={submitting}
         >
           {submitting

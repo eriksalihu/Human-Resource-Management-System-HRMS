@@ -157,8 +157,8 @@ const DepartmentForm = ({ initialData, onSubmit, onCancel, submitting = false })
         {errors.pershkrimi && <p className="mt-1 text-xs text-red-600">{errors.pershkrimi}</p>}
       </div>
 
-      {/* Location + Budget side by side */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Location + Budget — stacked on mobile, side-by-side from sm. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label htmlFor="lokacioni" className="block text-sm font-medium text-gray-700 mb-1">
             Location
@@ -219,14 +219,16 @@ const DepartmentForm = ({ initialData, onSubmit, onCancel, submitting = false })
         {loadingManagers && <p className="mt-1 text-xs text-gray-500">Loading managers…</p>}
       </div>
 
-      {/* Action buttons */}
-      <div className="flex items-center justify-end gap-3 pt-2">
+      {/* Action buttons — `flex-col-reverse` on mobile puts the primary
+          Submit button on TOP of the stack (where the thumb naturally
+          lands) while keeping the markup order Cancel-then-Submit. */}
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
         {onCancel && (
           <button
             type="button"
             onClick={onCancel}
             disabled={submitting}
-            className="px-4 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-colors"
+            className="w-full sm:w-auto px-4 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-colors"
           >
             Cancel
           </button>
@@ -234,7 +236,7 @@ const DepartmentForm = ({ initialData, onSubmit, onCancel, submitting = false })
         <button
           type="submit"
           disabled={submitting}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {submitting && <LoadingSpinner size="sm" color="white" />}
           {isEdit ? 'Update Department' : 'Create Department'}

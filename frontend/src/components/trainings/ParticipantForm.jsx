@@ -327,8 +327,8 @@ const ParticipantForm = ({
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+      {/* Actions — stacked w/ Submit on top on mobile, row on sm+. */}
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2 border-t border-gray-100">
         <button
           type="button"
           onClick={onCancel}

@@ -470,8 +470,11 @@ const EmployeeForm = ({ initialData, onSubmit, onCancel, submitting = false }) =
         </div>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex items-center justify-end gap-3 pt-2">
+      {/* Action buttons — stacked w/ Submit on top on mobile, row on sm+.
+          The flex-col-reverse parent puts the primary action where the
+          user's thumb falls; flex-col's default `align-items: stretch`
+          makes the buttons full-width without explicit `w-full`. */}
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
         {onCancel && (
           <button
             type="button"
@@ -485,7 +488,7 @@ const EmployeeForm = ({ initialData, onSubmit, onCancel, submitting = false }) =
         <button
           type="submit"
           disabled={submitting}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {submitting && <LoadingSpinner size="sm" color="white" />}
           {isEdit ? 'Update Employee' : 'Create Employee'}
