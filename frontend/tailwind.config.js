@@ -91,6 +91,12 @@ export default {
           '0%':   { transform: 'translateY(-10px)', opacity: '0' },
           '100%': { transform: 'translateY(0)',     opacity: '1' },
         },
+        // Mobile-modal "rise from bottom" entrance — bigger travel than
+        // the dropdown slides so the dialog reveal feels purposeful.
+        slideUp: {
+          '0%':   { transform: 'translateY(100%)', opacity: '0' },
+          '100%': { transform: 'translateY(0)',    opacity: '1' },
+        },
         shake: {
           '0%, 100%': { transform: 'translateX(0)' },
           '15%, 45%': { transform: 'translateX(-8px)' },
@@ -105,6 +111,7 @@ export default {
         'slide-in-right':  'slideInRight 250ms ease-out both',
         'slide-in-left':   'slideInLeft 250ms ease-out both',
         'slide-in-down':   'slideInDown 200ms ease-out both',
+        'slide-up':        'slideUp 220ms ease-out both',
         shake:             'shake 450ms ease-in-out',
       },
 
