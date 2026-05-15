@@ -2,6 +2,26 @@
  * @file frontend/src/pages/DashboardPage.jsx
  * @description Main dashboard composing StatCards row, charts grid, attendance summary, leave calendar, and recent activities in a responsive layout
  * @author Dev A
+ *
+ * Responsive grid layout (commit 239):
+ *
+ *                        mobile     sm (640)    md (768)    lg (1024)
+ *   ─────────────────────────────────────────────────────────────────
+ *   KPI strip            1 col      2 cols      2 cols      4 cols
+ *   Charts row           1 col      1 col       1 col       2 cols
+ *   Advanced analytics   1 col      1 col       2 cols      2 cols
+ *   Lower row            1 col      1 col       2 cols      3 cols
+ *
+ * Widget priority on small viewports:
+ *   The "Attendance today" KPI and the live AttendanceSummary widget
+ *   are reordered to appear first on phone-sized screens — daily HR
+ *   attendance is the most operationally-urgent surface; charts and
+ *   activity feeds matter less in a quick mobile glance.
+ *
+ * Container width:
+ *   `max-w-7xl mx-auto` caps the dashboard at ~1280px on ultra-wide
+ *   monitors so the cards don't stretch into uncomfortable widths.
+ *   Padding is responsive (`p-4 sm:p-6`) — phones get tighter margins.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -144,7 +164,7 @@ const DashboardPage = () => {
   }, [attendanceToday]);
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-5 max-w-7xl mx-auto w-full">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
@@ -156,38 +176,11 @@ const DashboardPage = () => {
         </p>
       </div>
 
-      {/* KPI strip — 4 cards on lg, scaling down responsively */}
+      {/* KPI strip — 1 col mobile → 2 col tablet (sm/md) → 4 col desktop.
+          The "Attendance today" card is reordered to first on mobile via
+          `order-` utilities — it's the most time-sensitive KPI for HR on
+          a phone glance. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Active employees"
-          value={counts?.active_employees ?? '—'}
-          subtitle={
-            counts?.total_employees != null
-              ? `${counts.total_employees} total on record`
-              : undefined
-          }
-          icon="users"
-          variant="indigo"
-          to="/employees"
-          loading={loading}
-        />
-        <StatCard
-          title="Departments"
-          value={counts?.total_departments ?? '—'}
-          icon="briefcase"
-          variant="sky"
-          to="/departments"
-          loading={loading}
-        />
-        <StatCard
-          title="Pending leaves"
-          value={counts?.pending_leave_requests ?? '—'}
-          subtitle="Awaiting approval"
-          icon="calendar"
-          variant="amber"
-          to="/leaves"
-          loading={loading}
-        />
         <StatCard
           title="Attendance today"
           value={
@@ -204,10 +197,45 @@ const DashboardPage = () => {
           variant="emerald"
           to="/attendance"
           loading={loading}
+          className="order-1 lg:order-4"
+        />
+        <StatCard
+          title="Active employees"
+          value={counts?.active_employees ?? '—'}
+          subtitle={
+            counts?.total_employees != null
+              ? `${counts.total_employees} total on record`
+              : undefined
+          }
+          icon="users"
+          variant="indigo"
+          to="/employees"
+          loading={loading}
+          className="order-2 lg:order-1"
+        />
+        <StatCard
+          title="Pending leaves"
+          value={counts?.pending_leave_requests ?? '—'}
+          subtitle="Awaiting approval"
+          icon="calendar"
+          variant="amber"
+          to="/leaves"
+          loading={loading}
+          className="order-3 lg:order-3"
+        />
+        <StatCard
+          title="Departments"
+          value={counts?.total_departments ?? '—'}
+          icon="briefcase"
+          variant="sky"
+          to="/departments"
+          loading={loading}
+          className="order-4 lg:order-2"
         />
       </div>
 
-      {/* Optional payroll KPI (HR / Admin only) */}
+      {/* Optional payroll KPI (HR / Admin only) — same 1/2/4 grid as the
+          main KPI strip so the two rows line up cleanly. */}
       {isHR && payroll && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
@@ -247,8 +275,9 @@ const DashboardPage = () => {
         </div>
       )}
 
-      {/* Charts grid (2x1 on lg, stack on smaller) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Charts grid — single column on phones, 2-up from tablet (md)
+          onwards. Charts are too dense to be useful in 2-up before md. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <EmployeeChart
           data={charts?.employees_by_department || []}
           loading={loading}
@@ -263,7 +292,7 @@ const DashboardPage = () => {
           is hidden from non-privileged users since payroll totals are
           sensitive; the other three widgets show for everyone. */}
       {(isHR || charts?.training_completion || charts?.performance_by_department) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {isHR && (
             <SalaryTrendChart
               data={charts?.salary_trend?.series || []}
@@ -285,8 +314,12 @@ const DashboardPage = () => {
         </div>
       )}
 
-      {/* Lower row: attendance / leave calendar / recent activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Lower row: attendance / leave calendar / recent activity.
+          Stack on phones, 2-up on tablet (md), 3-up on desktop.
+          AttendanceSummary appears first on mobile (most operational); on
+          tablet (md) it spans both columns since the 3rd widget needs the
+          desktop width to render meaningfully. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <AttendanceSummary
           attendance={
             attendanceToday || {
@@ -302,7 +335,9 @@ const DashboardPage = () => {
           loading={loading}
         />
         <LeaveCalendar />
-        <RecentActivities limit={8} />
+        <div className="md:col-span-2 lg:col-span-1">
+          <RecentActivities limit={8} />
+        </div>
       </div>
 
       {/* Bottom-left fallback while top-level fetch is in flight and we
