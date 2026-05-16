@@ -28,13 +28,18 @@ const LoadingSpinner = ({ size = 'md', color = 'indigo', message }) => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center gap-3">
+    <div
+      className="flex flex-col items-center justify-center gap-3"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
       <svg
         className={`animate-spin ${sizeClasses[size]} ${colorClasses[color]}`}
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
-        aria-label="Loading"
+        aria-hidden="true"
       >
         <circle
           className="opacity-25"
@@ -53,6 +58,9 @@ const LoadingSpinner = ({ size = 'md', color = 'indigo', message }) => {
       {message && (
         <p className="text-sm text-gray-500">{message}</p>
       )}
+      {/* Always provide a screen-reader announcement even when there's
+          no visible message — the spinner itself is aria-hidden. */}
+      <span className="sr-only">{message || 'Loading, please wait'}</span>
     </div>
   );
 };

@@ -589,8 +589,15 @@ const DataTable = ({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           {/* Bulk action bar (only visible when rows are selected) */}
           {hasSelection ? (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-indigo-50 ring-1 ring-inset ring-indigo-200 text-sm">
-              <span className="font-medium text-indigo-900">
+            <div
+              role="region"
+              aria-label="Bulk actions"
+              className="flex items-center gap-2 px-3 py-2 rounded-md bg-indigo-50 ring-1 ring-inset ring-indigo-200 text-sm"
+            >
+              <span
+                className="font-medium text-indigo-900"
+                aria-live="polite"
+              >
                 {selectionCount} selected
               </span>
               {bulkActions.map((action) => {
@@ -753,7 +760,20 @@ const DataTable = ({
         }`}
       >
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table
+            className="min-w-full divide-y divide-gray-200"
+            aria-rowcount={data.length}
+          >
+            <caption className="sr-only">
+              Data table with {visibleColumns.length} columns and{' '}
+              {data.length} rows.
+              {onSort
+                ? ' Sortable columns can be activated with Enter.'
+                : ''}
+              {onRowClick
+                ? ' Use arrow keys to move between rows and Enter to open one.'
+                : ''}
+            </caption>
             {/* Table header */}
             <thead className="bg-gray-50">
               <tr>
@@ -769,23 +789,47 @@ const DataTable = ({
                     />
                   </th>
                 )}
-                {visibleColumns.map((column) => (
-                  <th
-                    key={column.key}
-                    scope="col"
-                    className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
-                      column.sortable
-                        ? 'cursor-pointer select-none hover:bg-gray-100 transition-colors'
-                        : ''
-                    }`}
-                    onClick={() => column.sortable && handleSort(column.key)}
-                  >
-                    <div className="flex items-center">
-                      {column.label}
-                      {column.sortable && renderSortIcon(column.key)}
-                    </div>
-                  </th>
-                ))}
+                {visibleColumns.map((column) => {
+                  // `aria-sort` must reflect the live sort state so
+                  // screen readers announce "sorted ascending", etc.
+                  const ariaSort = !column.sortable
+                    ? undefined
+                    : sortBy === column.key
+                      ? sortOrder === 'ASC'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none';
+                  return (
+                    <th
+                      key={column.key}
+                      scope="col"
+                      aria-sort={ariaSort}
+                      className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                        column.sortable
+                          ? 'cursor-pointer select-none hover:bg-gray-100 transition-colors'
+                          : ''
+                      }`}
+                      onClick={() => column.sortable && handleSort(column.key)}
+                    >
+                      {column.sortable ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSort(column.key);
+                          }}
+                          className="flex items-center uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
+                          aria-label={`Sort by ${column.label}`}
+                        >
+                          {column.label}
+                          {renderSortIcon(column.key)}
+                        </button>
+                      ) : (
+                        <div className="flex items-center">{column.label}</div>
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
 

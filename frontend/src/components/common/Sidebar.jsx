@@ -245,6 +245,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   return (
     <aside
+      id="app-sidebar"
       aria-label="Main navigation"
       aria-hidden={!isOpen}
       onTouchStart={onTouchStart}

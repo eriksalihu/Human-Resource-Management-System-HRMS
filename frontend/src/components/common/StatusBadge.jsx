@@ -47,6 +47,11 @@ const statusColors = {
  * StatusBadge - Color-coded badge for displaying status values
  * Automatically maps status strings to appropriate color schemes.
  *
+ * Accessibility: color alone can't convey meaning to color-blind or
+ * screen-reader users, so the badge carries an explicit `aria-label`
+ * ("Status: Approved") and `role="status"`. The visible text remains
+ * the source of truth; the label just disambiguates it as a *status*.
+ *
  * @param {Object} props
  * @param {string} props.status - The status value to display
  * @returns {JSX.Element} The status badge
@@ -57,6 +62,9 @@ const StatusBadge = ({ status }) => {
 
   return (
     <span
+      role="status"
+      aria-label={`Status: ${displayText}`}
+      title={displayText}
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass}`}
     >
       {displayText}
