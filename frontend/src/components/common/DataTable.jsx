@@ -107,13 +107,24 @@ const DataTableRow = memo(function DataTableRow({
   rowClassString,
   onRowClick,
   onToggleSelect,
+  onRowKeyDown,
 }) {
   return (
     <tr
       className={`${
-        onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''
+        onRowClick
+          ? 'cursor-pointer hover:bg-gray-50 focus:outline-none focus:bg-indigo-50 focus:ring-2 focus:ring-inset focus:ring-indigo-500'
+          : ''
       } ${isSelected ? 'bg-indigo-50/40' : ''} ${rowClassString} transition-colors`}
       onClick={() => onRowClick && onRowClick(row)}
+      // Interactive rows participate in keyboard navigation: they're
+      // focusable (tabIndex 0) and the parent's roving handler moves
+      // focus with ↑/↓ and activates with Enter/Space.
+      tabIndex={onRowClick ? 0 : undefined}
+      onKeyDown={
+        onRowClick ? (e) => onRowKeyDown && onRowKeyDown(e, row) : undefined
+      }
+      aria-selected={selectable ? isSelected : undefined}
     >
       {selectable && (
         <td
@@ -473,6 +484,54 @@ const DataTable = ({
     [onRowClick]
   );
 
+  /**
+   * Roving keyboard navigation between rows. ↑ / ↓ move focus to the
+   * adjacent row, Home / End jump to the first / last row in the body,
+   * and Enter / Space activate the focused row's click handler.
+   *
+   * Implemented via DOM sibling traversal (vs. tracking a focus index
+   * in state) so it stays O(1) and doesn't force a re-render on every
+   * arrow press — important on large pages.
+   */
+  const handleRowKeyDown = useCallback(
+    (e, row) => {
+      const tr = e.currentTarget;
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault();
+          const next = tr.nextElementSibling;
+          if (next && typeof next.focus === 'function') next.focus();
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          const prev = tr.previousElementSibling;
+          if (prev && typeof prev.focus === 'function') prev.focus();
+          break;
+        }
+        case 'Home': {
+          e.preventDefault();
+          tr.parentElement?.firstElementChild?.focus();
+          break;
+        }
+        case 'End': {
+          e.preventDefault();
+          tr.parentElement?.lastElementChild?.focus();
+          break;
+        }
+        case 'Enter':
+        case ' ': {
+          e.preventDefault();
+          if (onRowClick) onRowClick(row);
+          break;
+        }
+        default:
+          break;
+      }
+    },
+    [onRowClick]
+  );
+
   const renderSortIcon = (columnKey) => {
     if (sortBy !== columnKey) {
       return (
@@ -778,6 +837,7 @@ const DataTable = ({
                       rowClassString={rowClassString}
                       onRowClick={onRowClick ? handleRowClick : undefined}
                       onToggleSelect={toggleRow}
+                      onRowKeyDown={handleRowKeyDown}
                     />
                   );
                 })

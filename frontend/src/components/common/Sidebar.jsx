@@ -181,6 +181,56 @@ const Sidebar = ({ isOpen, onClose }) => {
     }
   }, [isOpen]);
 
+  /**
+   * Keyboard navigation within the nav list:
+   *   - ↓ / ↑  : move focus to the next / previous link (wrapping)
+   *   - Home / End : jump to the first / last link
+   *   - Escape : dismiss the sidebar (mobile overlay UX)
+   *
+   * Tab still works natively for sequential focus; the arrow keys add
+   * the expected "menu" affordance on top without hijacking Tab.
+   */
+  const onNavKeyDown = (e) => {
+    const links = Array.from(
+      e.currentTarget.querySelectorAll('a[href]')
+    );
+    if (links.length === 0) return;
+    const currentIndex = links.indexOf(document.activeElement);
+
+    switch (e.key) {
+      case 'ArrowDown': {
+        e.preventDefault();
+        const next = links[(currentIndex + 1) % links.length];
+        next?.focus();
+        break;
+      }
+      case 'ArrowUp': {
+        e.preventDefault();
+        const prev =
+          links[(currentIndex - 1 + links.length) % links.length];
+        prev?.focus();
+        break;
+      }
+      case 'Home': {
+        e.preventDefault();
+        links[0]?.focus();
+        break;
+      }
+      case 'End': {
+        e.preventDefault();
+        links[links.length - 1]?.focus();
+        break;
+      }
+      case 'Escape': {
+        e.preventDefault();
+        onClose?.();
+        break;
+      }
+      default:
+        break;
+    }
+  };
+
   // Inline style for the live drag offset. Only applied while a touch
   // gesture is active; otherwise the CSS classes handle the transform.
   const dragStyle =
@@ -226,10 +276,17 @@ const Sidebar = ({ isOpen, onClose }) => {
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
-        <p className="text-xs uppercase tracking-wider mb-4 px-3 text-gray-400 dark:text-gray-500">
+        <p
+          id="sidebar-menu-label"
+          className="text-xs uppercase tracking-wider mb-4 px-3 text-gray-400 dark:text-gray-500"
+        >
           Menu
         </p>
-        <nav className="space-y-1">
+        <nav
+          aria-labelledby="sidebar-menu-label"
+          onKeyDown={onNavKeyDown}
+          className="space-y-1"
+        >
           {navItems.map((item) => (
             <NavLink
               key={item.path}

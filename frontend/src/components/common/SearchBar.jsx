@@ -1,7 +1,18 @@
 /**
  * @file frontend/src/components/common/SearchBar.jsx
- * @description Debounced search input with clear button and search icon
+ * @description Debounced search input with clear button, search icon,
+ *   and keyboard shortcuts (Enter = search now, Escape = clear).
  * @author Dev B
+ *
+ * v2 (commit 245) adds keyboard affordances:
+ *   - **Enter** fires `onSearch` immediately with the current value,
+ *     bypassing the debounce — for users who want results NOW rather
+ *     than waiting out the delay timer.
+ *   - **Escape** clears the field and emits an empty search (only when
+ *     there's something to clear, so Escape still bubbles for closing
+ *     modals/dropdowns when the box is already empty).
+ *   - `role="search"` landmark + an explicit input `aria-label` so the
+ *     control is announced and reachable by assistive tech.
  */
 
 import { useState, useEffect } from 'react';
@@ -50,8 +61,25 @@ const SearchBar = ({
     }
   };
 
+  /**
+   * Keyboard shortcuts on the input:
+   *   - Enter  → search immediately with the current value
+   *   - Escape → clear (only when non-empty, so Escape still propagates
+   *              to close an enclosing modal when the field is blank)
+   */
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (typeof onSearch === 'function') onSearch(value);
+    } else if (e.key === 'Escape' && value) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleClear();
+    }
+  };
+
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative ${className}`} role="search">
       {/* Search icon */}
       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
         <svg
@@ -71,10 +99,12 @@ const SearchBar = ({
 
       {/* Input */}
       <input
-        type="text"
+        type="search"
         value={value}
         onChange={(e) => setValue(e.target.value)}
+        onKeyDown={handleKeyDown}
         placeholder={placeholder}
+        aria-label={placeholder}
         className="block w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
       />
 
