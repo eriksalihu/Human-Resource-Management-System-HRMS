@@ -21,6 +21,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import Sidebar from '../components/common/Sidebar';
 import Footer from '../components/common/Footer';
+import Breadcrumb from '../components/common/Breadcrumb';
 
 /** Tailwind `lg` breakpoint in pixels — kept in JS so the responsive logic
  * matches the CSS without forcing a media-query lookup. */
@@ -110,14 +111,28 @@ const MainLayout = () => {
             sidebarOpen ? 'lg:ml-64' : 'lg:ml-0'
           }`}
         >
+          {/* Breadcrumb strip — sits directly below the Navbar, above the
+              page content. Hidden on the dashboard (Breadcrumb returns
+              null at the root) so the home view stays clean. */}
+          <div className="px-4 sm:px-6 pt-3">
+            <Breadcrumb />
+          </div>
+
           {/* Scrollable content area. min-h ensures footer sits at the bottom
-              even on short pages without forcing the page to scroll. */}
+              even on short pages without forcing the page to scroll.
+
+              The inner wrapper is keyed by pathname so React remounts it
+              on every route change, which re-triggers the entrance
+              animation — a subtle fade-up that makes navigation feel
+              smooth rather than an instant hard cut. */}
           <main
             id="main-content"
             tabIndex={-1}
             className="flex-1 min-h-[calc(100vh-4rem-3rem)] focus:outline-none"
           >
-            <Outlet />
+            <div key={location.pathname} className="animate-slide-in-down">
+              <Outlet />
+            </div>
           </main>
 
           {/* Footer */}
