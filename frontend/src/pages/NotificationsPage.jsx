@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as notificationApi from '../api/notificationApi';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import { SkeletonText } from '../components/common/SkeletonLoader';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useToast } from '../components/common/Toast';
 import { SafeText, sanitizeUrl } from '../utils/security';
@@ -368,8 +368,12 @@ const NotificationsPage = () => {
 
       {/* List body */}
       {loading ? (
-        <div className="flex justify-center py-10">
-          <LoadingSpinner />
+        <div className="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="p-4">
+              <SkeletonText lines={2} />
+            </div>
+          ))}
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-gray-200 bg-white p-10 text-center text-gray-500">

@@ -6,7 +6,7 @@
 
 import { useState, useCallback } from 'react';
 import ProfileSettings from '../components/users/ProfileSettings';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import { SkeletonCard } from '../components/common/SkeletonLoader';
 import { capitalizeFirst } from '../utils/formatters';
 import useAuth from '../hooks/useAuth';
 
@@ -40,8 +40,9 @@ const ProfilePage = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <LoadingSpinner />
+      <div className="p-6 max-w-3xl mx-auto space-y-4">
+        <SkeletonCard lines={4} />
+        <SkeletonCard avatar={false} lines={3} />
       </div>
     );
   }

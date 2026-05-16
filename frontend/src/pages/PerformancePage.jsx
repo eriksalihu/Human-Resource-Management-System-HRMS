@@ -10,7 +10,7 @@ import ReviewList from '../components/performance/ReviewList';
 import ReviewForm from '../components/performance/ReviewForm';
 import ReviewDetail from '../components/performance/ReviewDetail';
 import Modal from '../components/common/Modal';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import { SkeletonTable, SkeletonChart } from '../components/common/SkeletonLoader';
 import { useToast } from '../components/common/Toast';
 import useAuth from '../hooks/useAuth';
 
@@ -340,8 +340,9 @@ const MyReviewsPanel = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-10">
-        <LoadingSpinner />
+      <div className="p-6 space-y-4">
+        <SkeletonChart height={220} />
+        <SkeletonTable rows={6} columns={5} />
       </div>
     );
   }

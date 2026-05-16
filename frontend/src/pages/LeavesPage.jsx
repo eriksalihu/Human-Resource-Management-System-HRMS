@@ -11,7 +11,7 @@ import LeaveRequestForm from '../components/leaves/LeaveRequestForm';
 import LeaveApproval from '../components/leaves/LeaveApproval';
 import Modal from '../components/common/Modal';
 import ConfirmDialog from '../components/common/ConfirmDialog';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import { SkeletonTable } from '../components/common/SkeletonLoader';
 import { useToast } from '../components/common/Toast';
 import useAuth from '../hooks/useAuth';
 
@@ -438,9 +438,7 @@ const MyRequestsPanel = ({ onAdd, onEdit, onCancel }) => {
 
       {/* Requests list */}
       {loading ? (
-        <div className="flex justify-center py-10">
-          <LoadingSpinner />
-        </div>
+        <SkeletonTable rows={6} columns={5} />
       ) : data.requests.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-lg p-10 text-center text-gray-500">
           <p className="text-sm">
@@ -659,9 +657,7 @@ const LeaveCalendar = ({ scope = 'mine' }) => {
 
       {/* Grid */}
       {loading ? (
-        <div className="flex justify-center py-10">
-          <LoadingSpinner />
-        </div>
+        <SkeletonTable rows={6} columns={5} />
       ) : (
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
           {/* Weekday header */}

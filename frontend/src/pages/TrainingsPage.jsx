@@ -11,7 +11,7 @@ import TrainingForm from '../components/trainings/TrainingForm';
 import TrainingDetail from '../components/trainings/TrainingDetail';
 import ParticipantForm from '../components/trainings/ParticipantForm';
 import Modal from '../components/common/Modal';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import { SkeletonTable } from '../components/common/SkeletonLoader';
 import { useToast } from '../components/common/Toast';
 import useAuth from '../hooks/useAuth';
 
@@ -435,8 +435,8 @@ const MyTrainingsPanel = ({ onView }) => {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-10">
-        <LoadingSpinner />
+      <div className="p-6">
+        <SkeletonTable rows={6} columns={5} />
       </div>
     );
   }
