@@ -52,6 +52,20 @@ router.get(
 );
 
 /**
+ * @route   GET /api/performance-reviews/team
+ * @desc    Team performance analytics for a manager (aggregate scores,
+ *          top/bottom performers, improvement areas)
+ * @access  Private (Department Manager, HR Manager, Admin)
+ *
+ * NOTE: Registered before /:id so "team" isn't parsed as an ID.
+ */
+router.get(
+  '/team',
+  authorize(['Admin', 'HR Manager', 'Department Manager']),
+  performanceReviewController.getTeamPerformance
+);
+
+/**
  * @route   GET /api/performance-reviews
  * @desc    List performance reviews with filters
  * @access  Private (Admin, HR Manager, Department Manager)

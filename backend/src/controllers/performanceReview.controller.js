@@ -7,6 +7,7 @@
 const PerformanceReview = require('../models/PerformanceReview');
 const Employee = require('../models/Employee');
 const Notification = require('../models/Notification');
+const db = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 
 /**
@@ -420,12 +421,140 @@ const remove = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/performance-reviews/team
+ * Team performance analytics for a manager.
+ *
+ * Resolves the requesting user's employee record and aggregates review
+ * scores across their direct reports (Employees.menaxheri_id = manager).
+ * HR / Admin may inspect any manager's team via `?manager_id=`.
+ *
+ * Returns, per the roadmap spec:
+ *   - per-member aggregates (avg rating, review count, latest review)
+ *   - team-wide average + reviewed-coverage
+ *   - top / bottom performer
+ *   - "improvement areas" — members rated below the team average
+ *
+ * @query {string} [periudha]    restrict to one review period
+ * @query {number} [manager_id]  HR/Admin only — inspect another manager
+ */
+const getTeamPerformance = async (req, res, next) => {
+  try {
+    const { periudha, manager_id } = req.query;
+
+    const roles = req.user?.roles || [];
+    const isPrivileged = roles.some((r) => PRIVILEGED_ROLES.includes(r));
+
+    // Determine which manager's team we're reporting on.
+    let managerEmployeeId;
+    if (manager_id) {
+      if (!isPrivileged) {
+        throw new AppError(
+          'Only HR / Admin may inspect another manager’s team',
+          403
+        );
+      }
+      managerEmployeeId = parseInt(manager_id, 10);
+    } else {
+      const me = await getRequestingEmployee(req.user.id);
+      managerEmployeeId = me.id;
+    }
+
+    // Per-member aggregates. LEFT JOIN so a report with zero reviews
+    // still appears (with null avg / 0 count) — managers need to see
+    // who hasn't been reviewed yet, not just who has. The optional
+    // period filter lives in the JOIN (not WHERE) so unreviewed reports
+    // aren't filtered out of the result set.
+    const periodClause = periudha ? 'AND pr.periudha = ?' : '';
+
+    const [rows] = await db.query(
+      `SELECT
+         e.id                         AS employee_id,
+         e.numri_punonjesit,
+         u.first_name, u.last_name,
+         COUNT(pr.id)                 AS review_count,
+         AVG(pr.nota)                 AS avg_rating,
+         MAX(pr.data_vleresimit)      AS latest_review_date
+       FROM Employees e
+       LEFT JOIN Users u ON e.user_id = u.id
+       LEFT JOIN PerformanceReviews pr
+              ON pr.employee_id = e.id ${periodClause}
+       WHERE e.menaxheri_id = ?
+       GROUP BY e.id, e.numri_punonjesit, u.first_name, u.last_name
+       ORDER BY avg_rating IS NULL, avg_rating DESC`,
+      // param order must match the SQL: period (inside JOIN) then manager
+      periudha ? [periudha, managerEmployeeId] : [managerEmployeeId]
+    );
+
+    const members = rows.map((r) => ({
+      employee_id: r.employee_id,
+      numri_punonjesit: r.numri_punonjesit,
+      name: `${r.first_name || ''} ${r.last_name || ''}`.trim(),
+      review_count: Number(r.review_count) || 0,
+      avg_rating:
+        r.avg_rating != null ? +Number(r.avg_rating).toFixed(2) : null,
+      latest_review_date: r.latest_review_date || null,
+    }));
+
+    // Team average over members that actually have a rating.
+    const rated = members.filter((m) => m.avg_rating != null);
+    const teamAverage =
+      rated.length > 0
+        ? +(
+            rated.reduce((s, m) => s + m.avg_rating, 0) / rated.length
+          ).toFixed(2)
+        : null;
+
+    // Top / bottom performer (only meaningful with ≥1 rated member).
+    const sortedByRating = [...rated].sort(
+      (a, b) => b.avg_rating - a.avg_rating
+    );
+    const topPerformer = sortedByRating[0] || null;
+    const bottomPerformer =
+      sortedByRating.length > 0
+        ? sortedByRating[sortedByRating.length - 1]
+        : null;
+
+    // Improvement areas: rated members below the team average.
+    const improvementAreas =
+      teamAverage != null
+        ? rated
+            .filter((m) => m.avg_rating < teamAverage)
+            .map((m) => ({
+              employee_id: m.employee_id,
+              name: m.name,
+              avg_rating: m.avg_rating,
+              gap_to_team_avg: +(teamAverage - m.avg_rating).toFixed(2),
+            }))
+        : [];
+
+    res.json({
+      success: true,
+      data: {
+        manager_employee_id: managerEmployeeId,
+        ...(periudha ? { periudha } : {}),
+        team_size: members.length,
+        reviewed_count: rated.length,
+        unreviewed_count: members.length - rated.length,
+        team_average: teamAverage,
+        top_performer: topPerformer,
+        bottom_performer: bottomPerformer,
+        improvement_areas: improvementAreas,
+        members,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAll,
   getById,
   getMyReviews,
   getReviewsToComplete,
   getStatistics,
+  getTeamPerformance,
   create,
   update,
   remove,
