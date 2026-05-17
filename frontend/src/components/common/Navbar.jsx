@@ -108,7 +108,7 @@ const Navbar = ({ onToggleSidebar }) => {
 
   return (
     <nav
-      className="fixed top-0 left-0 right-0 z-30 h-16 border-b shadow-sm
+      className="no-print fixed top-0 left-0 right-0 z-30 h-16 border-b shadow-sm
         bg-white border-gray-200
         dark:bg-gray-900 dark:border-gray-800"
     >

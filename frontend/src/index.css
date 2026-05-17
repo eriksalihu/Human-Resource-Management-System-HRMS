@@ -163,3 +163,121 @@ html.dark ::-webkit-scrollbar-thumb {
 html.dark ::-webkit-scrollbar-thumb:hover {
   background-color: #4b5563; /* gray-600 */
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Print styles
+ *
+ * Goal: when the user prints (or "Save as PDF") an employee profile, a
+ * salary report, or an attendance report, the output should be a clean
+ * paper document — no app chrome, no dark mode, full-width content, and
+ * sensible page breaks.
+ *
+ * Strategy:
+ *   - `.no-print`     → removed from the printed output (navbar,
+ *                       sidebar, footer, breadcrumb, toasts, action
+ *                       buttons that make no sense on paper).
+ *   - `.print-only`   → hidden on screen, revealed only when printing
+ *                       (e.g. a report letterhead / generated-on stamp).
+ *   - The main column's responsive left-margin (lg:ml-64 for the open
+ *     sidebar) is forced to 0 so content isn't shoved off the page.
+ *   - Cards/sections get `break-inside: avoid` so a table or profile
+ *     block isn't split awkwardly across two sheets.
+ * ─────────────────────────────────────────────────────────────────── */
+
+/* Hidden on screen; only materializes for print. */
+.print-only {
+  display: none !important;
+}
+
+@media print {
+  /* A4 with comfortable margins. */
+  @page {
+    size: A4;
+    margin: 16mm;
+  }
+
+  /* Force a light, ink-friendly canvas regardless of dark mode. */
+  html,
+  body,
+  #root {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Strip app chrome + anything explicitly opted out of print. */
+  .no-print,
+  nav[aria-label='Breadcrumb'],
+  nav[aria-label='Pagination'],
+  [role='contentinfo'],
+  [role='region'][aria-label='Notifications'] {
+    display: none !important;
+  }
+
+  /* Sidebar (has a stable id since commit 246) — gone on paper. */
+  #app-sidebar {
+    display: none !important;
+  }
+
+  /* Neutralize the layout offsets that exist for the on-screen
+     navbar (pt-16) and open sidebar (lg:ml-64) so the report uses the
+     full printable width. Selectors are attribute-stable. */
+  #main-content {
+    min-height: 0 !important;
+  }
+  #main-content,
+  #main-content * {
+    /* Drop shadows + fixed positioning print as ugly artifacts. */
+    box-shadow: none !important;
+  }
+
+  /* The flex body wrapper carries pt-16; the main column carries the
+     sidebar margin. Reset both via their structural roles. */
+  body * {
+    /* Avoid clipping content at a fixed viewport height. */
+    overflow: visible !important;
+  }
+
+  /* Reveal print-only elements (letterhead, timestamp, etc.). */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Keep logical blocks together across page breaks. */
+  table,
+  thead,
+  tr,
+  img,
+  .print-keep,
+  .rounded-lg,
+  .rounded-xl {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Headings shouldn't be the last thing on a page. */
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Make links self-documenting on paper (show the URL). Skip in-app
+     anchors and javascript: / mailto: noise. */
+  a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.85em;
+    color: #555;
+    word-break: break-all;
+  }
+
+  /* Tables read better with visible rules on paper. */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  th,
+  td {
+    border: 1px solid #d1d5db !important;
+  }
+}
