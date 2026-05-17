@@ -23,40 +23,40 @@ const TYPE_OPTIONS = [
 ];
 
 /**
- * MIME types accepted client-side. The backend has its own whitelist —
- * keeping these in sync prevents needless 400s on upload.
+ * MIME types accepted client-side. Kept in lock-step with the backend's
+ * hardened whitelist (commit 261 — security): pdf / doc / docx / jpg /
+ * png only. Validating here too means we reject early with a friendly
+ * message instead of round-tripping for a 400.
  */
 const ACCEPTED_MIME = new Set([
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'image/jpeg',
   'image/png',
-  'image/gif',
-  'text/plain',
 ]);
 
 /**
- * Extension-based fallback for browsers / OSes that don't surface a MIME
- * type for the dropped file (looking at you, drag from some file managers).
+ * Extension fallback for browsers / OSes that don't surface a MIME type
+ * for the dropped file. Mirrors the backend's extension whitelist.
  */
 const ACCEPTED_EXT = new Set([
   '.pdf',
   '.doc',
   '.docx',
-  '.xls',
-  '.xlsx',
   '.jpg',
   '.jpeg',
   '.png',
-  '.gif',
-  '.txt',
 ]);
 
-/** Max file size — 10 MB, matching the multer limit on the backend. */
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+/** Human label for the allowed set — single source for help text + errors. */
+const ALLOWED_LABEL = 'PDF, DOC(X), JPG, PNG';
+
+/** Max file size — 5 MB, matching the hardened multer limit on the backend. */
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+/** Largest filename base we let the user rename to (matches server slug cap). */
+const MAX_RENAME_LEN = 40;
 
 /** ISO YYYY-MM-DD for today (server-local). */
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -77,17 +77,22 @@ const validateFile = (file) => {
   if (!file) return 'No file provided';
 
   if (file.size > MAX_FILE_BYTES) {
-    return `File is too large (${formatBytes(file.size)} — max 10 MB)`;
+    return `File is too large (${formatBytes(file.size)} — max 5 MB)`;
   }
 
-  if (file.type && ACCEPTED_MIME.has(file.type)) return null;
-
-  // Extension fallback for files without a server-side mime type.
+  // Require BOTH a known extension AND (when present) a matching MIME —
+  // mirrors the backend's defense against Content-Type spoofing.
   const lower = file.name.toLowerCase();
   const dot = lower.lastIndexOf('.');
-  if (dot > -1 && ACCEPTED_EXT.has(lower.slice(dot))) return null;
+  const ext = dot > -1 ? lower.slice(dot) : '';
 
-  return `Unsupported file type. Allowed: PDF, DOC(X), XLS(X), JPG, PNG, GIF, TXT.`;
+  if (!ACCEPTED_EXT.has(ext)) {
+    return `Unsupported file type. Allowed: ${ALLOWED_LABEL}.`;
+  }
+  if (file.type && !ACCEPTED_MIME.has(file.type)) {
+    return `File content (${file.type}) doesn't match its ${ext} extension.`;
+  }
+  return null;
 };
 
 /**
@@ -117,6 +122,11 @@ const DocumentUpload = ({
   const [file, setFile] = useState(null);
   const [fileError, setFileError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+
+  /** Object URL for the image preview (null for non-images / no file). */
+  const [previewUrl, setPreviewUrl] = useState(null);
+  /** Editable on-disk filename base (no extension). */
+  const [renameBase, setRenameBase] = useState('');
 
   const [form, setForm] = useState({
     employee_id: defaultEmployeeId || '',
@@ -184,6 +194,30 @@ const DocumentUpload = ({
     setForm((prev) => ({ ...prev, emertimi: base }));
     // Intentionally don't depend on form.emertimi — we only auto-fill once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file]);
+
+  /**
+   * Manage the image preview object URL. Created when an image file is
+   * picked, revoked when it changes or the component unmounts (object
+   * URLs leak memory until revoked).
+   */
+  useEffect(() => {
+    if (!file || !file.type?.startsWith('image/')) {
+      setPreviewUrl(null);
+      return undefined;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  /** Seed the rename field from the picked file's base name. */
+  useEffect(() => {
+    if (!file) {
+      setRenameBase('');
+      return;
+    }
+    setRenameBase(file.name.replace(/\.[^/.]+$/, '').slice(0, MAX_RENAME_LEN));
   }, [file]);
 
   /** Generic field change handler. */
@@ -296,8 +330,25 @@ const DocumentUpload = ({
     setUploading(true);
     setProgress(0);
     try {
+      // Apply the user's rename: rebuild the File so `originalname` on
+      // the server reflects the chosen base (extension is preserved —
+      // the backend whitelist keys off it). Skip the rebuild when the
+      // name is unchanged so we don't needlessly clone the blob.
+      const ext = file.name.slice(file.name.lastIndexOf('.'));
+      const safeBase =
+        renameBase
+          .trim()
+          .replace(/[^a-z0-9_-]+/gi, '_')
+          .replace(/^\.+/, '')
+          .slice(0, MAX_RENAME_LEN) || 'file';
+      const originalBase = file.name.replace(/\.[^/.]+$/, '');
+      const uploadFile =
+        safeBase === originalBase
+          ? file
+          : new File([file], `${safeBase}${ext}`, { type: file.type });
+
       const created = await documentApi.upload({
-        file,
+        file: uploadFile,
         employee_id: Number(form.employee_id),
         lloji: form.lloji,
         emertimi: form.emertimi.trim(),
@@ -360,28 +411,45 @@ const DocumentUpload = ({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.txt"
+          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
           onChange={handleFileInput}
           className="hidden"
         />
 
         {file ? (
           <div className="flex flex-col items-center gap-1">
-            <svg
-              className="h-10 w-10 text-emerald-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+            {previewUrl ? (
+              /* Image preview thumbnail */
+              <img
+                src={previewUrl}
+                alt={`Preview of ${file.name}`}
+                className="max-h-32 max-w-[12rem] rounded-md object-contain ring-1 ring-gray-200 bg-white"
               />
-            </svg>
-            <p className="text-sm font-medium text-gray-900">{file.name}</p>
+            ) : file.type === 'application/pdf' ? (
+              /* PDF badge */
+              <div className="flex h-16 w-16 items-center justify-center rounded-md bg-red-50 ring-1 ring-red-200">
+                <span className="text-xs font-bold text-red-600">PDF</span>
+              </div>
+            ) : (
+              /* Generic doc check icon */
+              <svg
+                className="h-10 w-10 text-emerald-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                />
+              </svg>
+            )}
+            <p className="mt-1 text-sm font-medium text-gray-900">
+              {file.name}
+            </p>
             <p className="text-xs text-gray-500">{formatBytes(file.size)}</p>
             <button
               type="button"
@@ -414,13 +482,46 @@ const DocumentUpload = ({
               {dragActive ? 'Drop the file here' : 'Drag and drop a file'}
             </p>
             <p className="text-xs text-gray-500">
-              or click to pick · PDF, DOC(X), XLS(X), JPG, PNG, GIF, TXT · max 10 MB
+              or click to pick · {ALLOWED_LABEL} · max 5 MB
             </p>
           </div>
         )}
       </div>
       {(fileError || errors.file) && (
         <p className="text-xs text-red-600">{fileError || errors.file}</p>
+      )}
+
+      {/* Rename the stored file (distinct from the human-facing display
+          name below — this controls the on-disk filename the server
+          keeps). Only shown once a valid file is picked. */}
+      {file && (
+        <div>
+          <label
+            htmlFor="upload-rename"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            File name{' '}
+            <span className="text-gray-400 text-xs">(optional rename)</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              id="upload-rename"
+              value={renameBase}
+              onChange={(e) => setRenameBase(e.target.value)}
+              maxLength={MAX_RENAME_LEN}
+              placeholder="filename"
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            />
+            <span className="text-sm text-gray-500 font-mono shrink-0">
+              {file.name.slice(file.name.lastIndexOf('.'))}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-gray-400">
+            Letters, numbers, dashes and underscores only · the extension
+            is kept as-is.
+          </p>
+        </div>
       )}
 
       {/* Metadata fields */}
