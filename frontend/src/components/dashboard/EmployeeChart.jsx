@@ -10,7 +10,8 @@
  * `<BarChart>` from Recharts without any caller-side changes.
  */
 
-import { useMemo, useRef, useState, useLayoutEffect } from 'react';
+import { useMemo, useRef, useState, useEffect, useLayoutEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * Inline bar-chart skeleton. Matches the chart's real footprint so the
@@ -105,12 +106,24 @@ const useElementWidth = (ref) => {
 /**
  * EmployeeChart — bar chart of employees per department.
  *
+ * Interactive (commit 258):
+ *   - Clicking a bar navigates to the employee list filtered to that
+ *     department (`/employees?department_id=…`), or calls `onBarClick`
+ *     if the caller wants custom behavior. Bars are keyboard-operable
+ *     (focusable, Enter / Space activate).
+ *   - Hover tooltip is enriched: headcount, share of the total
+ *     workforce, and a "click to view" affordance.
+ *   - Bars animate up from the baseline on mount and re-animate when
+ *     the dataset changes (staggered for a subtle cascade).
+ *
  * @param {Object} props
  * @param {Array<{ department_id: number, emertimi: string, headcount: number }>} props.data
  * @param {boolean} [props.loading=false]
  * @param {string} [props.title='Employees by department']
  * @param {string} [props.emptyMessage]
  * @param {number} [props.height=280] - Chart drawing height in px
+ * @param {(datum: Object) => void} [props.onBarClick] - Custom bar-click
+ *   handler. When omitted, clicking navigates to the filtered list.
  * @returns {JSX.Element}
  */
 const EmployeeChart = ({
@@ -119,10 +132,61 @@ const EmployeeChart = ({
   title = 'Employees by department',
   emptyMessage = 'No department data yet — once employees are seeded this chart will populate.',
   height = 280,
+  onBarClick,
 }) => {
   const wrapperRef = useRef(null);
   const measuredWidth = useElementWidth(wrapperRef);
   const [hoveredIndex, setHoveredIndex] = useState(null);
+  const navigate = useNavigate();
+
+  /**
+   * Entrance / data-change animation gate. Bars render at scaleY(0)
+   * while `play` is false, then transition to scaleY(1). We flip it off
+   * then on whenever the data signature changes so the bars re-grow on
+   * a fresh fetch rather than snapping to the new heights.
+   */
+  const [play, setPlay] = useState(false);
+  const dataSignature = data
+    .map((d) => `${d.department_id}:${d.headcount}`)
+    .join('|');
+
+  useEffect(() => {
+    setPlay(false);
+    // Two rAFs: one to commit the scaleY(0) frame, the next to start
+    // the transition to scaleY(1). A single rAF can be coalesced with
+    // the state-set and skip the from-frame.
+    let raf2;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setPlay(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    };
+  }, [dataSignature]);
+
+  /**
+   * Total workforce across all bars — used for the "X% of workforce"
+   * line in the enriched tooltip.
+   */
+  const totalHeadcount = useMemo(
+    () => data.reduce((sum, d) => sum + (Number(d.headcount) || 0), 0),
+    [data]
+  );
+
+  /**
+   * Resolve a bar click — caller override wins, else navigate to the
+   * employee list pre-filtered to the clicked department.
+   */
+  const handleBarActivate = (datum) => {
+    if (typeof onBarClick === 'function') {
+      onBarClick(datum);
+      return;
+    }
+    if (datum?.department_id) {
+      navigate(`/employees?department_id=${datum.department_id}`);
+    }
+  };
 
   /**
    * Derive bar geometry from props. Calculated lazily so the SVG re-renders
@@ -236,15 +300,41 @@ const EmployeeChart = ({
               {/* Bars + labels */}
               {geometry.bars.map((bar, i) => {
                 const isHovered = hoveredIndex === i;
+                const activate = () => handleBarActivate(bar);
                 return (
                   <g
                     key={bar.department_id || `bar-${i}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${bar.emertimi}: ${bar.value} employee${
+                      bar.value === 1 ? '' : 's'
+                    }. Activate to view this department's employees.`}
                     onMouseEnter={() => setHoveredIndex(i)}
                     onMouseLeave={() =>
                       setHoveredIndex((prev) => (prev === i ? null : prev))
                     }
-                    className="cursor-pointer"
+                    onFocus={() => setHoveredIndex(i)}
+                    onBlur={() =>
+                      setHoveredIndex((prev) => (prev === i ? null : prev))
+                    }
+                    onClick={activate}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        activate();
+                      }
+                    }}
+                    className="cursor-pointer focus:outline-none"
                   >
+                    {/* Invisible full-height hit area so the whole column
+                        is clickable, not just the (possibly short) bar. */}
+                    <rect
+                      x={bar.x}
+                      y={geometry.padding.top}
+                      width={bar.width}
+                      height={geometry.innerHeight}
+                      fill="transparent"
+                    />
                     <rect
                       x={bar.x}
                       y={bar.y}
@@ -253,11 +343,34 @@ const EmployeeChart = ({
                       rx={4}
                       ry={4}
                       fill={bar.color}
-                      opacity={
-                        hoveredIndex == null || isHovered ? 1 : 0.55
-                      }
-                      style={{ transition: 'opacity 120ms ease' }}
+                      opacity={hoveredIndex == null || isHovered ? 1 : 0.55}
+                      style={{
+                        // Grow from the baseline. transform-box: fill-box
+                        // makes the % origin resolve against the rect's
+                        // own box so scaleY pivots on its bottom edge.
+                        transformBox: 'fill-box',
+                        transformOrigin: 'bottom',
+                        transform: play ? 'scaleY(1)' : 'scaleY(0)',
+                        transition: `transform 500ms cubic-bezier(0.22,1,0.36,1) ${
+                          i * 40
+                        }ms, opacity 120ms ease`,
+                      }}
                     />
+                    {/* Focus ring (SVG has no native one on <g>) */}
+                    {isHovered && (
+                      <rect
+                        x={bar.x - 2}
+                        y={bar.y - 2}
+                        width={bar.width + 4}
+                        height={bar.height + 4}
+                        rx={5}
+                        ry={5}
+                        fill="none"
+                        stroke={bar.color}
+                        strokeWidth={1.5}
+                        opacity={0.5}
+                      />
+                    )}
                     {/* Value label above the bar */}
                     {bar.value > 0 && (
                       <text
@@ -304,6 +417,20 @@ const EmployeeChart = ({
                 <div className="text-gray-200">
                   {geometry.bars[hoveredIndex].value} employee
                   {geometry.bars[hoveredIndex].value === 1 ? '' : 's'}
+                  {totalHeadcount > 0 && (
+                    <>
+                      {' · '}
+                      {Math.round(
+                        (geometry.bars[hoveredIndex].value /
+                          totalHeadcount) *
+                          100
+                      )}
+                      % of workforce
+                    </>
+                  )}
+                </div>
+                <div className="mt-0.5 text-[10px] text-indigo-300">
+                  Click to view employees →
                 </div>
               </div>
             )}
