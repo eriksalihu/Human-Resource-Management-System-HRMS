@@ -60,57 +60,140 @@ if (!fs.existsSync(UPLOAD_ROOT)) {
   fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
 }
 
-/** MIME types we accept. Keeps out executables / scripts. */
-const ALLOWED_MIME_TYPES = new Set([
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'text/plain',
-]);
+/**
+ * Strict upload whitelist (commit 261 — security hardening).
+ *
+ * Keyed by lower-cased extension → the set of MIME types legitimately
+ * associated with it. We require BOTH the extension AND the reported
+ * MIME type to match an entry: clients can trivially spoof the
+ * Content-Type header, so an extension cross-check closes that gap.
+ *
+ * Scope is deliberately narrow (pdf / doc / docx / jpg / png) per the
+ * security spec — HR document uploads have no legitimate need for
+ * spreadsheets, archives, or arbitrary text, and every extra type is
+ * extra attack surface.
+ */
+const ALLOWED_UPLOAD_TYPES = {
+  pdf: ['application/pdf'],
+  doc: ['application/msword'],
+  docx: [
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ],
+  jpg: ['image/jpeg'],
+  jpeg: ['image/jpeg'],
+  png: ['image/png'],
+};
 
-/** Max file size: 10 MB. */
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+/** Flat set of every allowed MIME, for quick membership tests. */
+const ALLOWED_MIME_TYPES = new Set(
+  Object.values(ALLOWED_UPLOAD_TYPES).flat()
+);
+
+/** Max file size: 5 MB (security spec). */
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Sanitize a user-supplied filename base into a safe slug.
+ *
+ * Defends against:
+ *   - Path traversal (`../`, absolute paths) — we take `path.basename`
+ *     and additionally strip any residual separators.
+ *   - Null bytes / control chars — stripped.
+ *   - Leading dots — would create hidden / dotfiles on disk.
+ *   - Over-long names — capped at 40 chars.
+ *
+ * @param {string} original - The raw `file.originalname`
+ * @returns {string} A safe, lower-cased base (never empty)
+ */
+const sanitizeFilenameBase = (original) => {
+  const ext = path.extname(original || '');
+  const rawBase = path.basename(original || '', ext);
+  const cleaned = rawBase
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f\x7f]/g, '') // control chars / NUL
+    .replace(/[/\\]+/g, '') // any residual path separators
+    .replace(/[^a-z0-9_-]+/gi, '_') // collapse anything non-slug
+    .replace(/^\.+/, '') // no leading dots (dotfiles)
+    .toLowerCase()
+    .slice(0, 40);
+  return cleaned || 'file';
+};
 
 /**
  * Multer disk storage — filenames are timestamped to avoid collisions
  * while preserving the original extension for convenient downloads.
+ * The base is run through the sanitizer above.
  */
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_ROOT),
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || '';
-    const base = path
-      .basename(file.originalname, ext)
-      .replace(/[^a-z0-9_-]+/gi, '_')
-      .toLowerCase()
-      .slice(0, 40);
+    const ext = (path.extname(file.originalname) || '').toLowerCase();
+    const base = sanitizeFilenameBase(file.originalname);
     const unique = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    cb(null, `${base || 'file'}_${unique}${ext}`);
+    cb(null, `${base}_${unique}${ext}`);
   },
 });
 
 /**
- * MIME-type gate for multer. Rejected uploads propagate as AppError(400)
- * through the error handler.
+ * Upload gate for multer — enforces the extension + MIME whitelist.
+ * Rejected uploads propagate as AppError(400) through the error handler.
  */
 const fileFilter = (_req, file, cb) => {
-  if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
-    return cb(null, true);
+  const ext = path
+    .extname(file.originalname || '')
+    .toLowerCase()
+    .replace(/^\./, '');
+  const allowedMimes = ALLOWED_UPLOAD_TYPES[ext];
+
+  if (!allowedMimes) {
+    return cb(
+      new AppError(
+        `Unsupported file extension ".${ext}". Allowed: ${Object.keys(
+          ALLOWED_UPLOAD_TYPES
+        ).join(', ')}`,
+        400
+      )
+    );
   }
-  cb(new AppError(`Unsupported file type: ${file.mimetype}`, 400));
+  if (!allowedMimes.includes(file.mimetype)) {
+    return cb(
+      new AppError(
+        `File content type "${file.mimetype}" does not match its ".${ext}" extension`,
+        400
+      )
+    );
+  }
+  return cb(null, true);
 };
 
 /** Configured multer instance — imported by the routes layer. */
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: MAX_FILE_BYTES },
+  limits: { fileSize: MAX_FILE_BYTES, files: 1 },
 });
+
+/**
+ * Virus-scan placeholder.
+ *
+ * Integration point for ClamAV / VirusTotal / a cloud AV service. The
+ * real implementation would stream the file to the scanner and reject
+ * on a positive. For now it resolves "clean" so the pipeline is wired
+ * end-to-end and flipping on a real scanner is a one-function change.
+ *
+ * Kept async on purpose so the eventual network/IPC call doesn't
+ * require touching every caller.
+ *
+ * @param {string} absPath - Absolute path to the just-written upload
+ * @returns {Promise<{ clean: boolean, engine: string }>}
+ */
+// eslint-disable-next-line no-unused-vars
+const scanForViruses = async (absPath) => {
+  // TODO(security): replace with a real AV scan, e.g.
+  //   const { isInfected } = await clam.scanFile(absPath);
+  //   return { clean: !isInfected, engine: 'clamav' };
+  return { clean: true, engine: 'noop-placeholder' };
+};
 
 /**
  * Delete a file from disk, swallowing ENOENT so a missing file never
@@ -298,6 +381,17 @@ const create = async (req, res, next) => {
 
     if (!employee_id || !lloji || !emertimi) {
       bailOut('employee_id, lloji and emertimi are required', 400);
+    }
+
+    // Virus-scan gate. multer has already enforced size + the
+    // extension/MIME whitelist; this is the content-level check.
+    // bailOut removes the quarantined file and 422s the request.
+    const scan = await scanForViruses(req.file.path);
+    if (!scan.clean) {
+      bailOut(
+        'Uploaded file failed the security scan and was rejected',
+        422
+      );
     }
 
     if (!Document.VALID_TYPES.includes(lloji)) {
