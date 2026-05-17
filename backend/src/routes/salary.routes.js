@@ -30,6 +30,20 @@ router.get(
 );
 
 /**
+ * @route   GET /api/salaries/payroll/report
+ * @desc    Monthly payroll report — company totals, department
+ *          breakdown, and year-over-year comparison
+ * @access  Private (Admin, HR Manager)
+ *
+ * NOTE: Must be registered BEFORE /:id so "payroll" isn't parsed as an ID.
+ */
+router.get(
+  '/payroll/report',
+  authorize(['Admin', 'HR Manager']),
+  salaryController.getPayrollReport
+);
+
+/**
  * @route   GET /api/salaries/employee/:employeeId
  * @desc    Full salary history for one employee (optional ?year=YYYY filter)
  * @access  Private (Admin, HR Manager, Department Manager)

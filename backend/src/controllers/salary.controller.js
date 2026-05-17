@@ -6,6 +6,7 @@
 
 const Salary = require('../models/Salary');
 const Employee = require('../models/Employee');
+const db = require('../config/db');
 const { AppError } = require('../middleware/errorHandler');
 const { calculateNetSalary } = require('../utils/helpers');
 
@@ -621,11 +622,132 @@ const generateMonthlyPayroll = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/salaries/payroll/report?muaji=X&viti=Y
+ * Rich payroll report for one month:
+ *   - company-wide totals (headcount, base, bonuses, deductions, net)
+ *   - per-department breakdown
+ *   - year-over-year comparison vs. the same month last year, with
+ *     absolute + percentage deltas on the company net total
+ *
+ * Distinct from `getPayrollSummary` (which is a single aggregate row):
+ * this is the management-report shape the frontend renders as a table
+ * with a comparison banner.
+ *
+ * @query {number} muaji - Month 1–12 (required)
+ * @query {number} viti  - Year (required)
+ */
+const getPayrollReport = async (req, res, next) => {
+  try {
+    const { muaji, viti } = req.query;
+
+    const month = parseInt(muaji, 10);
+    const year = parseInt(viti, 10);
+    if (!month || month < 1 || month > 12 || !year) {
+      throw new AppError(
+        'muaji (1-12) and viti are required query params',
+        400
+      );
+    }
+
+    /**
+     * One pass over the period's salary rows, grouped by department.
+     * COALESCE so a salary row whose employee has no department still
+     * lands in an "Unassigned" bucket rather than vanishing.
+     */
+    const [deptRows] = await db.query(
+      `SELECT
+         COALESCE(d.id, 0)              AS department_id,
+         COALESCE(d.emertimi, 'Unassigned') AS department,
+         COUNT(*)                       AS headcount,
+         SUM(s.paga_baze)               AS total_base,
+         SUM(s.bonuse)                  AS total_bonuses,
+         SUM(s.zbritje)                 AS total_deductions,
+         SUM(s.paga_neto)               AS total_net
+       FROM Salaries s
+       LEFT JOIN Employees   e ON s.employee_id = e.id
+       LEFT JOIN Departments d ON e.department_id = d.id
+       WHERE s.muaji = ? AND s.viti = ?
+       GROUP BY COALESCE(d.id, 0), COALESCE(d.emertimi, 'Unassigned')
+       ORDER BY total_net DESC`,
+      [month, year]
+    );
+
+    const num = (v) => Number(v) || 0;
+    const departments = deptRows.map((r) => ({
+      department_id: r.department_id || null,
+      department: r.department,
+      headcount: num(r.headcount),
+      total_base: +num(r.total_base).toFixed(2),
+      total_bonuses: +num(r.total_bonuses).toFixed(2),
+      total_deductions: +num(r.total_deductions).toFixed(2),
+      total_net: +num(r.total_net).toFixed(2),
+    }));
+
+    /** Company-wide totals = sum of the department buckets. */
+    const company = departments.reduce(
+      (acc, d) => ({
+        headcount: acc.headcount + d.headcount,
+        total_base: acc.total_base + d.total_base,
+        total_bonuses: acc.total_bonuses + d.total_bonuses,
+        total_deductions: acc.total_deductions + d.total_deductions,
+        total_net: acc.total_net + d.total_net,
+      }),
+      {
+        headcount: 0,
+        total_base: 0,
+        total_bonuses: 0,
+        total_deductions: 0,
+        total_net: 0,
+      }
+    );
+    // Round once at the end to avoid float-accumulation drift.
+    Object.keys(company).forEach((k) => {
+      company[k] = +company[k].toFixed(2);
+    });
+
+    /** Same month, previous year — single aggregate row. */
+    const [[prior]] = await db.query(
+      `SELECT
+         COUNT(*)         AS headcount,
+         SUM(s.paga_neto) AS total_net
+       FROM Salaries s
+       WHERE s.muaji = ? AND s.viti = ?`,
+      [month, year - 1]
+    );
+
+    const priorNet = +num(prior?.total_net).toFixed(2);
+    const netChange = +(company.total_net - priorNet).toFixed(2);
+    const netChangePct =
+      priorNet > 0 ? +((netChange / priorNet) * 100).toFixed(1) : null;
+
+    res.json({
+      success: true,
+      data: {
+        period: { muaji: month, viti: year },
+        company,
+        departments,
+        year_over_year: {
+          compared_to: { muaji: month, viti: year - 1 },
+          prior_headcount: num(prior?.headcount),
+          prior_total_net: priorNet,
+          net_change: netChange,
+          // null when there's no prior-year data to divide by
+          net_change_pct: netChangePct,
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAll,
   getById,
   getEmployeeHistory,
   getPayrollSummary,
+  getPayrollReport,
   create,
   update,
   remove,
