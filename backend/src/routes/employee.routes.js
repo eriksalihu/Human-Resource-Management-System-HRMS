@@ -39,6 +39,21 @@ router.get(
 );
 
 /**
+ * @route   GET /api/employees/export/csv
+ * @desc    Stream the employee roster as a CSV download
+ * @access  Private (Admin, HR Manager)
+ *
+ * NOTE: Registered BEFORE /:id so "export" isn't parsed as an ID. The
+ * /export/csv shape (vs /export) keeps room for future formats.
+ */
+router.get(
+  '/export/csv',
+  authorize(['Admin', 'HR Manager']),
+  auditLog(),
+  employeeController.exportToCSV
+);
+
+/**
  * @route   GET /api/employees
  * @desc    List employees with pagination, search, and filters
  * @access  Private (Admin, HR Manager, Department Manager)

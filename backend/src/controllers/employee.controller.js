@@ -509,6 +509,190 @@ const advancedSearch = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/employees/export/csv
+ * Export the full employee roster as a CSV download.
+ *
+ * Joins Users / Positions / Departments / manager so the file is
+ * self-contained for HR (no opaque foreign keys). Honours the same
+ * filter params as the listing (`department_id`, `statusi`,
+ * `lloji_kontrates`, `search`) so "filter then export" works.
+ *
+ * Streaming rationale: a growing company could have thousands of
+ * employees. Rather than build one giant string in memory, we set the
+ * CSV headers, write the header row, then stream rows from a query
+ * cursor in chunks — memory stays flat regardless of roster size.
+ *
+ * @query {string} [search]
+ * @query {number} [department_id]
+ * @query {string} [statusi]            single status
+ * @query {string} [lloji_kontrates]    single contract type
+ */
+const exportToCSV = async (req, res, next) => {
+  try {
+    const { search, department_id, statusi, lloji_kontrates } = req.query;
+
+    const conditions = [];
+    const params = [];
+
+    if (search) {
+      conditions.push(
+        '(u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ? OR e.numri_punonjesit LIKE ?)'
+      );
+      const like = `%${search}%`;
+      params.push(like, like, like, like);
+    }
+    if (department_id) {
+      conditions.push('e.department_id = ?');
+      params.push(parseInt(department_id, 10));
+    }
+    if (statusi && VALID_STATUSES.includes(statusi)) {
+      conditions.push('e.statusi = ?');
+      params.push(statusi);
+    }
+    if (
+      lloji_kontrates &&
+      VALID_CONTRACT_TYPES.includes(lloji_kontrates)
+    ) {
+      conditions.push('e.lloji_kontrates = ?');
+      params.push(lloji_kontrates);
+    }
+
+    const where = conditions.length
+      ? `WHERE ${conditions.join(' AND ')}`
+      : '';
+
+    /**
+     * Escape one CSV cell per RFC 4180: wrap in quotes when the value
+     * contains a comma, quote, or newline; double internal quotes.
+     * Null / undefined → empty cell.
+     */
+    const csvCell = (value) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      return /[",\r\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+
+    const HEADERS = [
+      'Employee #',
+      'First name',
+      'Last name',
+      'Email',
+      'Phone',
+      'Position',
+      'Department',
+      'Manager',
+      'Contract',
+      'Status',
+      'Hire date',
+      'Latest net salary',
+    ];
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="employees_${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv"`
+    );
+    // UTF-8 BOM so Excel renders accented names (e.g. "Krasniqi")
+    // correctly instead of mojibake.
+    res.write('﻿');
+    res.write(`${HEADERS.join(',')}\r\n`);
+
+    /**
+     * Keyset-paginated streaming: instead of one giant in-memory result
+     * set (or relying on mysql2 promise-pool stream internals), we page
+     * through the roster in batches of BATCH_SIZE ordered by `e.id`,
+     * writing each batch straight to the response and back-pressuring on
+     * `res.write`. Node memory stays flat at one batch regardless of
+     * whether the company has 50 or 50,000 employees.
+     */
+    const BATCH_SIZE = 500;
+    const baseSql = (extraWhere) => `
+      SELECT
+        e.id,
+        e.numri_punonjesit,
+        u.first_name, u.last_name, u.email, u.phone,
+        p.emertimi  AS position_emertimi,
+        d.emertimi  AS department_emertimi,
+        mgr_u.first_name AS mgr_first, mgr_u.last_name AS mgr_last,
+        e.lloji_kontrates, e.statusi, e.data_punesimit,
+        (SELECT s.paga_neto
+           FROM Salaries s
+          WHERE s.employee_id = e.id
+          ORDER BY s.viti DESC, s.muaji DESC
+          LIMIT 1) AS latest_net
+      FROM Employees e
+      LEFT JOIN Users u        ON e.user_id = u.id
+      LEFT JOIN Positions p    ON e.position_id = p.id
+      LEFT JOIN Departments d  ON e.department_id = d.id
+      LEFT JOIN Employees mgr  ON e.menaxheri_id = mgr.id
+      LEFT JOIN Users mgr_u    ON mgr.user_id = mgr_u.id
+      ${conditions.length ? `WHERE ${conditions.join(' AND ')} AND` : 'WHERE'} ${extraWhere}
+      ORDER BY e.id ASC
+      LIMIT ${BATCH_SIZE}`;
+
+    let lastId = 0;
+    // Drain helper so we respect backpressure on slow clients.
+    const writeLine = (chunk) =>
+      new Promise((resolve) => {
+        if (res.write(chunk)) resolve();
+        else res.once('drain', resolve);
+      });
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const [rows] = await db.query(baseSql('e.id > ?'), [
+        ...params,
+        lastId,
+      ]);
+      if (rows.length === 0) break;
+
+      for (const r of rows) {
+        const managerName =
+          r.mgr_first || r.mgr_last
+            ? `${r.mgr_first || ''} ${r.mgr_last || ''}`.trim()
+            : '';
+        const line = [
+          r.numri_punonjesit,
+          r.first_name,
+          r.last_name,
+          r.email,
+          r.phone,
+          r.position_emertimi,
+          r.department_emertimi,
+          managerName,
+          r.lloji_kontrates,
+          r.statusi,
+          r.data_punesimit
+            ? new Date(r.data_punesimit).toISOString().slice(0, 10)
+            : '',
+          r.latest_net != null ? Number(r.latest_net).toFixed(2) : '',
+        ]
+          .map(csvCell)
+          .join(',');
+        // eslint-disable-next-line no-await-in-loop
+        await writeLine(`${line}\r\n`);
+      }
+
+      lastId = rows[rows.length - 1].id;
+      if (rows.length < BATCH_SIZE) break;
+    }
+
+    res.end();
+  } catch (err) {
+    // If nothing has been written yet we can still surface a JSON error;
+    // once the body is streaming, the best we can do is end the response.
+    if (res.headersSent) {
+      // eslint-disable-next-line no-console
+      console.error('[employee.exportToCSV] post-stream error:', err);
+      return res.end();
+    }
+    return next(err);
+  }
+};
+
 module.exports = {
   getAll,
   getById,
@@ -518,4 +702,5 @@ module.exports = {
   update,
   remove,
   advancedSearch,
+  exportToCSV,
 };
