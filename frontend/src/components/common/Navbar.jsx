@@ -92,17 +92,23 @@ const Navbar = ({ onToggleSidebar }) => {
     if (theme?.toggle) theme.toggle();
   };
 
-  /** Logout via auth context, then redirect to login. */
+  /**
+   * Logout via auth context, then redirect to login.
+   *
+   * `{ replace: true }` drops the protected page from the history
+   * stack so pressing Back after logout can't briefly re-render a
+   * stale authenticated screen before ProtectedRoute bounces it.
+   */
   const handleLogout = async () => {
     setProfileOpen(false);
     if (!auth?.logout) {
-      navigate('/login');
+      navigate('/login', { replace: true });
       return;
     }
     try {
       await auth.logout();
     } finally {
-      navigate('/login');
+      navigate('/login', { replace: true });
     }
   };
 

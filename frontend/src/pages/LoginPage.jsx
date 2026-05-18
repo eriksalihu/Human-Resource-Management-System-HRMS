@@ -5,8 +5,9 @@
  */
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import LoginForm from '../components/auth/LoginForm';
+import useAuth from '../hooks/useAuth';
 
 /**
  * LoginPage - Authentication page for user login
@@ -17,18 +18,44 @@ import LoginForm from '../components/auth/LoginForm';
  */
 const LoginPage = () => {
   const [error, setError] = useState('');
+  const { login, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   /**
-   * Handle login form submission.
+   * Where to land after a successful login: the page the user was
+   * trying to reach before ProtectedRoute bounced them here (stashed
+   * in `location.state.from` by the guard), falling back to the
+   * dashboard for a direct visit to /login.
+   */
+  const from = location.state?.from?.pathname || '/dashboard';
+
+  // Already signed in? Don't show the form again — this also stops the
+  // back button from returning to /login after a successful login, and
+  // sends a logged-in user who hits /login straight to their app.
+  if (isAuthenticated) {
+    return <Navigate to={from} replace />;
+  }
+
+  /**
+   * Handle login form submission. On success, redirect to the intended
+   * page with `replace` so /login is NOT left in history (back button
+   * after login should go to wherever they were, not the form).
+   *
    * @param {Object} credentials - { email, password, rememberMe }
    */
   const handleLogin = async (credentials) => {
     try {
       setError('');
-      // TODO: Call auth API service when available
-      console.log('Login attempt:', credentials.email);
+      await login({
+        email: credentials.email,
+        password: credentials.password,
+      });
+      navigate(from, { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      setError(
+        err.response?.data?.message || 'Login failed. Please try again.'
+      );
     }
   };
 
