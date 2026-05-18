@@ -119,7 +119,14 @@ const RegisterForm = ({ onSubmit }) => {
     setLoading(true);
     setSubmitError(null);
     try {
-      const { confirm_password, accept_terms, ...submitData } = formData;
+      // `confirm_password` / `accept_terms` are client-only fields —
+      // aliased to underscore names so they're stripped from the
+      // payload without tripping the no-unused-vars rule.
+      const {
+        confirm_password: _cp,
+        accept_terms: _at,
+        ...submitData
+      } = formData;
       // Trim leading/trailing whitespace on text fields before submit.
       submitData.first_name = submitData.first_name.trim();
       submitData.last_name = submitData.last_name.trim();

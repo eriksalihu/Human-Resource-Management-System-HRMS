@@ -33,9 +33,13 @@ import { Component } from 'react';
  * Is this build running in development mode? Vite injects `import.meta.env.DEV`
  * at build time. Falls back to NODE_ENV check for non-Vite tests.
  */
+// Vite injects `import.meta.env`; `DEV` is true in `vite` dev and
+// false in a production build. (Previously this also probed
+// `process.env`, which doesn't exist in the browser bundle and tripped
+// no-undef.)
 const isDev =
-  import.meta?.env?.DEV ??
-  (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production');
+  Boolean(import.meta?.env?.DEV) ||
+  import.meta?.env?.MODE === 'development';
 
 /**
  * ErrorBoundary — class component because React Error Boundaries are
@@ -83,7 +87,7 @@ class ErrorBoundary extends Component {
 
     // Always log to the console — dev gets a nice expandable stack,
     // production gets a structured single line that's easy to grep.
-    // eslint-disable-next-line no-console
+     
     console.error(
       `[ErrorBoundary${name ? `:${name}` : ''}] caught render-phase error:`,
       error,
@@ -96,7 +100,7 @@ class ErrorBoundary extends Component {
       try {
         onError(error, errorInfo);
       } catch (reportErr) {
-        // eslint-disable-next-line no-console
+         
         console.error('[ErrorBoundary] reporter callback threw:', reportErr);
       }
     }

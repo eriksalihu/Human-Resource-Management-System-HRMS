@@ -128,7 +128,7 @@ const onTokenRefreshed = (newToken) => {
       cb(newToken);
     } catch (err) {
       // A misbehaving subscriber shouldn't break the others.
-      // eslint-disable-next-line no-console
+       
       console.error('[axiosInstance] subscriber threw:', err);
     }
   }
@@ -175,7 +175,7 @@ const triggerForcedLogout = (reason) => {
     try {
       onAuthFailure(reason);
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error('[axiosInstance] onAuthFailure callback threw:', err);
     }
   }

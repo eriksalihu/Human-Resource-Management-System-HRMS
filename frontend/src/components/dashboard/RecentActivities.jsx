@@ -55,7 +55,7 @@ const RecentActivitiesSkeleton = ({ rows = 5 }) => (
  */
 const ENTITY_META = {
   Users:               { label: 'user',                link: () => '/employees',  emoji: '👤' },
-  Employees:           { label: 'employee',            link: (id) => '/employees', emoji: '👥' },
+  Employees:           { label: 'employee',            link: () => '/employees', emoji: '👥' },
   Departments:         { label: 'department',          link: () => '/departments', emoji: '🏢' },
   Positions:           { label: 'position',            link: () => '/positions',  emoji: '💼' },
   Salaries:            { label: 'salary record',       link: () => '/salaries',   emoji: '💰' },

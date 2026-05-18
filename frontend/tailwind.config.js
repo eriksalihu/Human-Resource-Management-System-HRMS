@@ -3,6 +3,10 @@
  * @description Tailwind CSS configuration — class-strategy dark mode, brand color palette, extended spacing, and custom keyframe animations
  */
 
+// ESM import (this file is `export default`, so CommonJS `require` is
+// undefined here and tripped no-undef).
+import tailwindForms from '@tailwindcss/forms';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -126,7 +130,5 @@ export default {
     },
   },
 
-  plugins: [
-    require('@tailwindcss/forms'),
-  ],
+  plugins: [tailwindForms],
 };

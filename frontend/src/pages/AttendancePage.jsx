@@ -4,7 +4,7 @@
  * @author Dev B
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import * as attendanceApi from '../api/attendanceApi';
 import AttendanceList from '../components/attendance/AttendanceList';
 import AttendanceForm from '../components/attendance/AttendanceForm';

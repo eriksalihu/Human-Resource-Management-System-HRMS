@@ -70,7 +70,7 @@ const DepartmentList = ({ onAdd, onEdit }) => {
       });
       setDepartments(result.data);
       setPagination(result.pagination);
-    } catch (err) {
+    } catch {
       addToast('Failed to load departments', 'error');
     } finally {
       setLoading(false);

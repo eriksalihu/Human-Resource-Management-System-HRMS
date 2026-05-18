@@ -176,7 +176,7 @@ const PositionList = ({ onAdd, onEdit, onView }) => {
       const result = await positionApi.getAll(params);
       setPositions(result.data);
       setPagination(result.pagination);
-    } catch (err) {
+    } catch {
       addToast('Failed to load positions', 'error');
     } finally {
       setLoading(false);

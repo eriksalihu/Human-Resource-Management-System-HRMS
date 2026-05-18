@@ -168,7 +168,7 @@ const Modal = ({
       // dialog has had time to unmount before focusing.
       const prev = previousActiveRef.current;
       if (prev && typeof prev.focus === 'function') {
-        // eslint-disable-next-line no-undef
+         
         queueMicrotask(() => prev.focus());
       }
     };

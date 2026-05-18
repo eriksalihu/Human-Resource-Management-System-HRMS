@@ -299,7 +299,7 @@ const SalaryList = ({ onAdd, onEdit, onView }) => {
       });
       setSalaries(result.data);
       setPagination(result.pagination);
-    } catch (err) {
+    } catch {
       addToast('Failed to load salaries', 'error');
     } finally {
       setLoading(false);

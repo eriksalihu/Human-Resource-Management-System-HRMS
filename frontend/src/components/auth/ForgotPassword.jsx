@@ -57,7 +57,7 @@ const ForgotPassword = () => {
       await axiosInstance.post('/auth/forgot-password', { email: trimmed });
     } catch (err) {
       // Stay quiet — the user always sees the same outcome.
-      // eslint-disable-next-line no-console
+       
       console.warn(
         '[ForgotPassword] Reset request failed (UI hides this):',
         err.response?.status || err.message
