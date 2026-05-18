@@ -292,6 +292,19 @@ const Sidebar = ({ isOpen, onClose }) => {
             <NavLink
               key={item.path}
               to={item.path}
+              onClick={() => {
+                // Dismiss the overlay immediately on mobile. The
+                // MainLayout pathname effect only fires when the path
+                // actually changes — tapping the link for the page
+                // you're already on left the overlay stuck open. This
+                // closes it on EVERY nav tap below the lg breakpoint.
+                if (
+                  typeof window !== 'undefined' &&
+                  window.innerWidth < LG_BREAKPOINT_PX
+                ) {
+                  onClose?.();
+                }
+              }}
               className={({ isActive }) =>
                 `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150
                 ${

@@ -583,7 +583,7 @@ const DataTable = ({
   const hasSelection = selectable && selectionCount > 0;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 min-w-0">
       {/* Toolbar — column-visibility menu + (optional) bulk action bar */}
       {(hasSelection || columns.length > 0) && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -755,11 +755,13 @@ const DataTable = ({
       {/* Desktop / tablet table — wrapped in `overflow-x-auto` so it
           horizontally scrolls on narrow viewports when card mode is off. */}
       <div
-        className={`bg-white rounded-lg border border-gray-200 overflow-hidden ${
+        className={`bg-white rounded-lg border border-gray-200 overflow-hidden w-full max-w-full ${
           cardOnMobile ? 'hidden md:block' : ''
         }`}
       >
-        <div className="overflow-x-auto">
+        {/* `overscroll-x-contain` keeps a horizontal table-scroll from
+            chaining into the page/back-gesture on tablets. */}
+        <div className="overflow-x-auto overscroll-x-contain">
           <table
             className="min-w-full divide-y divide-gray-200"
             aria-rowcount={data.length}

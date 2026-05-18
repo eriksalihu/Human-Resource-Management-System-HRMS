@@ -276,8 +276,10 @@ const DashboardPage = () => {
       )}
 
       {/* Charts grid — single column on phones, 2-up from tablet (md)
-          onwards. Charts are too dense to be useful in 2-up before md. */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          onwards. `[&>*]:min-w-0` lets the wide SVG chart widgets
+          shrink to their column instead of forcing the grid track
+          wider and overlapping the neighbour on tablet. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 [&>*]:min-w-0">
         <EmployeeChart
           data={charts?.employees_by_department || []}
           loading={loading}
@@ -292,7 +294,7 @@ const DashboardPage = () => {
           is hidden from non-privileged users since payroll totals are
           sensitive; the other three widgets show for everyone. */}
       {(isHR || charts?.training_completion || charts?.performance_by_department) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 [&>*]:min-w-0">
           {isHR && (
             <SalaryTrendChart
               data={charts?.salary_trend?.series || []}
@@ -319,7 +321,7 @@ const DashboardPage = () => {
           AttendanceSummary appears first on mobile (most operational); on
           tablet (md) it spans both columns since the 3rd widget needs the
           desktop width to render meaningfully. */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 [&>*]:min-w-0">
         <AttendanceSummary
           attendance={
             attendanceToday || {
