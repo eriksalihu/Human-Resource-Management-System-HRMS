@@ -24,7 +24,18 @@ const TYPE_OPTIONS = [
 const PRIVILEGED_ROLES = ['Admin', 'HR Manager'];
 
 /** Today as YYYY-MM-DD for `min` attributes on date inputs. */
-const todayIso = () => new Date().toISOString().slice(0, 10);
+/**
+ * Local-timezone "today" as YYYY-MM-DD. Using `toISOString()` (UTC)
+ * shifted the date picker's `min` by a day for users at a UTC offset,
+ * so a same-day leave request could be wrongly blocked / allowed.
+ * Build from local date parts instead.
+ */
+const todayIso = () => {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+};
 
 /**
  * Calendar-days between two YYYY-MM-DD strings, inclusive. Returns 0 if

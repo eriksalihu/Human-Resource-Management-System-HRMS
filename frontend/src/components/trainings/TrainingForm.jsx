@@ -15,7 +15,17 @@ const STATUS_OPTIONS = [
 ];
 
 /** ISO YYYY-MM-DD for today (server-local). */
-const todayIso = () => new Date().toISOString().slice(0, 10);
+/**
+ * Local-timezone "today" as YYYY-MM-DD. `toISOString()` is UTC, which
+ * shifted the default training start/end dates by a day for users at a
+ * UTC offset; build from local date parts instead.
+ */
+const todayIso = () => {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+};
 
 /**
  * Calculate the duration in days (inclusive) between two YYYY-MM-DD dates.

@@ -17,7 +17,21 @@ const STATUS_OPTIONS = [
 ];
 
 /** ISO YYYY-MM-DD for today (server-local). */
-const todayIso = () => new Date().toISOString().slice(0, 10);
+/**
+ * Local-timezone "today" as YYYY-MM-DD.
+ *
+ * `new Date().toISOString()` is UTC, so a user behind UTC late in the
+ * day (or ahead of it early) got tomorrow's / yesterday's date as the
+ * input `min`/`max`/default — they couldn't pick their actual local
+ * "today". Building the string from the LOCAL date parts fixes the
+ * off-by-one.
+ */
+const todayIso = () => {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+};
 
 /**
  * Compute hours worked between two HH:MM[:SS] strings on the same date.
