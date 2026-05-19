@@ -7,15 +7,35 @@
 const db = require('../config/db');
 const { buildPaginationQuery, buildSearchCondition } = require('../utils/helpers');
 
-/** Whitelist of sortable columns to prevent SQL injection */
-const ALLOWED_SORT_COLUMNS = [
-  'id',
-  'numri_punonjesit',
-  'data_punesimit',
-  'statusi',
-  'lloji_kontrates',
-  'created_at',
-];
+/**
+ * Whitelist of sortable columns → fully-qualified SQL expression.
+ *
+ * Keyed by the public sort key the API accepts; the value is the
+ * table-qualified column so we can sort by JOINED columns (employee
+ * name from Users, department/position name) — previously `ORDER BY
+ * e.${sortBy}` hardcoded the `e.` prefix, so requesting `last_name` or
+ * `department_emertimi` silently fell back to sorting by id.
+ *
+ * Acts as the SQL-injection whitelist too: only keys in this map are
+ * ever interpolated into the query.
+ */
+const SORT_COLUMN_MAP = {
+  id: 'e.id',
+  numri_punonjesit: 'e.numri_punonjesit',
+  data_punesimit: 'e.data_punesimit',
+  statusi: 'e.statusi',
+  lloji_kontrates: 'e.lloji_kontrates',
+  created_at: 'e.created_at',
+  // Joined columns — now actually sortable.
+  first_name: 'u.first_name',
+  last_name: 'u.last_name',
+  email: 'u.email',
+  department_emertimi: 'd.emertimi',
+  position_emertimi: 'p.emertimi',
+};
+
+/** Back-compat: some callers still reference the array of valid keys. */
+const ALLOWED_SORT_COLUMNS = Object.keys(SORT_COLUMN_MAP);
 
 /**
  * Base SELECT / JOIN clause used by most read queries.
@@ -168,13 +188,20 @@ const findAll = async ({
 
   const { limit: perPage, offset, pagination } = buildPaginationQuery({ page, limit, total });
 
-  const safeSortBy = ALLOWED_SORT_COLUMNS.includes(sortBy) ? sortBy : 'id';
-  const safeSortOrder = String(sortOrder).toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+  // Resolve to the qualified expression; unknown keys → e.id.
+  const sortExpr = SORT_COLUMN_MAP[sortBy] || SORT_COLUMN_MAP.id;
+  const safeSortOrder =
+    String(sortOrder).toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
+  // NULL-last regardless of direction: a LEFT JOIN means an employee
+  // with no department/manager yields NULL in the sort column. MySQL
+  // sorts NULLs first on ASC / last on DESC by default, which looked
+  // like "random rows jumped to the top". `<expr> IS NULL` as the
+  // primary key forces unmatched rows to the bottom either way.
   const [rows] = await db.query(
     `${BASE_SELECT}
      ${where}
-     ORDER BY e.${safeSortBy} ${safeSortOrder}
+     ORDER BY ${sortExpr} IS NULL, ${sortExpr} ${safeSortOrder}
      LIMIT ? OFFSET ?`,
     [...params, perPage, offset]
   );

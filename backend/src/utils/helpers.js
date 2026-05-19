@@ -14,10 +14,32 @@
  * @returns {{ limit: number, offset: number, pagination: Object }}
  */
 const buildPaginationQuery = ({ page = 1, limit = 10, total }) => {
-  const currentPage = Math.max(1, parseInt(page, 10));
-  const perPage = Math.max(1, Math.min(100, parseInt(limit, 10)));
+  // Edge case: a non-numeric `page`/`limit` made `parseInt` return NaN,
+  // and `Math.max(1, NaN)` is NaN — which then poisoned offset and
+  // serialized as `null` in JSON. Coerce with a numeric fallback FIRST.
+  const safePage = Number.parseInt(page, 10);
+  const safeLimit = Number.parseInt(limit, 10);
+  const requestedPage = Math.max(
+    1,
+    Number.isFinite(safePage) ? safePage : 1
+  );
+  const perPage = Math.max(
+    1,
+    Math.min(100, Number.isFinite(safeLimit) ? safeLimit : 10)
+  );
+
+  // Edge case: empty result set / failed COUNT → `total` undefined or
+  // NaN made totalPages NaN. Clamp to a non-negative integer.
+  const safeTotal = Math.max(0, Number.parseInt(total, 10) || 0);
+  const totalPages = Math.ceil(safeTotal / perPage); // 0 when no rows
+
+  // Edge case: a filter shrank the result set so the requested page no
+  // longer exists (e.g. you were on page 5, filtered down to 1 page).
+  // Clamp to the last real page instead of returning an empty array
+  // for data that does exist.
+  const currentPage =
+    totalPages > 0 ? Math.min(requestedPage, totalPages) : 1;
   const offset = (currentPage - 1) * perPage;
-  const totalPages = Math.ceil(total / perPage);
 
   return {
     limit: perPage,
@@ -25,7 +47,7 @@ const buildPaginationQuery = ({ page = 1, limit = 10, total }) => {
     pagination: {
       currentPage,
       perPage,
-      total,
+      total: safeTotal,
       totalPages,
       hasNextPage: currentPage < totalPages,
       hasPrevPage: currentPage > 1,
