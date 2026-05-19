@@ -84,13 +84,15 @@ const DepartmentList = ({ onAdd, onEdit }) => {
   /**
    * Handle column sort click.
    */
-  const handleSort = (column) => {
-    if (sortBy === column) {
-      setSortOrder((prev) => (prev === 'ASC' ? 'DESC' : 'ASC'));
-    } else {
-      setSortBy(column);
-      setSortOrder('ASC');
-    }
+  const handleSort = (column, nextOrder) => {
+    // Honor the order DataTable already resolved (2nd arg) so the sort
+    // indicator and the query stay in lock-step; toggle only as a
+    // single-arg fallback.
+    const resolved =
+      nextOrder ||
+      (column === sortBy ? (sortOrder === 'ASC' ? 'DESC' : 'ASC') : 'ASC');
+    setSortBy(column);
+    setSortOrder(resolved);
     setPage(1);
   };
 

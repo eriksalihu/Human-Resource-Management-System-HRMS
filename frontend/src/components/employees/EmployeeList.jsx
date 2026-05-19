@@ -200,7 +200,20 @@ const VirtualizedEmployeeTable = ({
               className={`px-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 select-none ${
                 c.sortable ? 'cursor-pointer hover:text-gray-900' : ''
               }`}
-              onClick={() => c.sortable && onSort?.(c.key)}
+              onClick={() =>
+                c.sortable &&
+                onSort?.(
+                  c.key,
+                  // Pass the resolved next order so the virtualized
+                  // header drives sorting identically to DataTable —
+                  // no re-derivation, no toggle desync.
+                  c.key === sortBy
+                    ? sortOrder === 'ASC'
+                      ? 'DESC'
+                      : 'ASC'
+                    : 'ASC'
+                )
+              }
             >
               <span className="inline-flex items-center gap-1">
                 {c.label}
@@ -583,14 +596,19 @@ const EmployeeList = ({ onAdd, onEdit, onView }) => {
     fetchEmployees();
   }, [fetchEmployees]);
 
-  /** Handle column sort toggle. */
-  const handleSort = (column) => {
-    if (sortBy === column) {
-      setSortOrder((prev) => (prev === 'ASC' ? 'DESC' : 'ASC'));
-    } else {
-      setSortBy(column);
-      setSortOrder('ASC');
-    }
+  /**
+   * Handle column sort. DataTable (and the virtualized header) now pass
+   * the resolved next order as the 2nd arg — honor it so the visible
+   * sort indicator and the actual query can't disagree. The toggle is
+   * kept only as a fallback for any caller that still invokes with one
+   * arg.
+   */
+  const handleSort = (column, nextOrder) => {
+    const resolved =
+      nextOrder ||
+      (column === sortBy ? (sortOrder === 'ASC' ? 'DESC' : 'ASC') : 'ASC');
+    setSortBy(column);
+    setSortOrder(resolved);
     setPage(1);
   };
 

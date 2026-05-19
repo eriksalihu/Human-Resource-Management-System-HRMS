@@ -187,14 +187,13 @@ const UserList = ({
     setKnownRoles([...all].sort());
   }, [rolesByUserIdVersion]);
 
-  /** Column sort toggle. */
-  const handleSort = (column) => {
-    if (sortBy === column) {
-      setSortOrder((prev) => (prev === 'ASC' ? 'DESC' : 'ASC'));
-    } else {
-      setSortBy(column);
-      setSortOrder('ASC');
-    }
+  /** Column sort — honors the order DataTable resolved (2nd arg). */
+  const handleSort = (column, nextOrder) => {
+    const resolved =
+      nextOrder ||
+      (column === sortBy ? (sortOrder === 'ASC' ? 'DESC' : 'ASC') : 'ASC');
+    setSortBy(column);
+    setSortOrder(resolved);
     setPage(1);
   };
 
