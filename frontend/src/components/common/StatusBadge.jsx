@@ -8,39 +8,60 @@
  * Color mappings for different status values.
  * Each status maps to Tailwind CSS classes for background and text color.
  */
+/**
+ * Tone palette — light + dark variants in one place (commit 281).
+ * Previously every entry was a light-only `bg-X-100 text-X-800` string,
+ * so badges were near-invisible (dark text on a near-white chip) in
+ * dark mode. Each tone now carries a `dark:` pairing tuned for the
+ * dark surface (subtle translucent bg + light text).
+ */
+const TONES = {
+  green:
+    'bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-300',
+  gray: 'bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-300',
+  orange:
+    'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300',
+  red: 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300',
+  yellow:
+    'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300',
+  blue: 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300',
+  indigo:
+    'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-300',
+};
+
 const statusColors = {
   // General statuses
-  active: 'bg-green-100 text-green-800',
-  inactive: 'bg-gray-100 text-gray-800',
-  suspended: 'bg-orange-100 text-orange-800',
-  terminated: 'bg-red-100 text-red-800',
+  active: TONES.green,
+  inactive: TONES.gray,
+  suspended: TONES.orange,
+  terminated: TONES.red,
 
   // Request/approval statuses
-  pending: 'bg-yellow-100 text-yellow-800',
-  approved: 'bg-green-100 text-green-800',
-  rejected: 'bg-red-100 text-red-800',
-  cancelled: 'bg-gray-100 text-gray-800',
+  pending: TONES.yellow,
+  approved: TONES.green,
+  rejected: TONES.red,
+  cancelled: TONES.gray,
 
   // Salary statuses
-  processed: 'bg-blue-100 text-blue-800',
-  paid: 'bg-green-100 text-green-800',
+  processed: TONES.blue,
+  paid: TONES.green,
 
   // Attendance statuses
-  present: 'bg-green-100 text-green-800',
-  absent: 'bg-red-100 text-red-800',
-  late: 'bg-orange-100 text-orange-800',
-  'half-day': 'bg-yellow-100 text-yellow-800',
-  remote: 'bg-blue-100 text-blue-800',
+  present: TONES.green,
+  absent: TONES.red,
+  late: TONES.orange,
+  'half-day': TONES.yellow,
+  remote: TONES.blue,
 
   // Training statuses
-  upcoming: 'bg-blue-100 text-blue-800',
-  ongoing: 'bg-indigo-100 text-indigo-800',
-  completed: 'bg-green-100 text-green-800',
+  upcoming: TONES.blue,
+  ongoing: TONES.indigo,
+  completed: TONES.green,
 
   // Participation statuses
-  enrolled: 'bg-blue-100 text-blue-800',
-  dropped: 'bg-gray-100 text-gray-800',
-  'no-show': 'bg-red-100 text-red-800',
+  enrolled: TONES.blue,
+  dropped: TONES.gray,
+  'no-show': TONES.red,
 };
 
 /**
@@ -57,7 +78,7 @@ const statusColors = {
  * @returns {JSX.Element} The status badge
  */
 const StatusBadge = ({ status }) => {
-  const colorClass = statusColors[status] || 'bg-gray-100 text-gray-800';
+  const colorClass = statusColors[status] || TONES.gray;
   const displayText = status ? status.charAt(0).toUpperCase() + status.slice(1).replace('-', ' ') : 'Unknown';
 
   return (

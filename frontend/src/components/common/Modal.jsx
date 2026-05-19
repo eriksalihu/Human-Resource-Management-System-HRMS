@@ -273,7 +273,7 @@ const Modal = ({
         ref={dialogRef}
         tabIndex={-1}
         className={`
-          relative z-10 flex flex-col bg-white shadow-xl
+          relative z-10 flex flex-col bg-white dark:bg-gray-900 shadow-xl
           w-full h-full
           sm:h-auto sm:max-h-[90vh] sm:w-full sm:mx-4 sm:rounded-xl
           ${desktopSizeClass}
@@ -285,17 +285,17 @@ const Modal = ({
         aria-labelledby="modal-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <h3
             id="modal-title"
-            className="text-lg font-semibold text-gray-900 truncate"
+            className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate"
           >
             {title}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+            className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 dark:focus:ring-offset-gray-900"
             aria-label="Close modal"
           >
             <svg
