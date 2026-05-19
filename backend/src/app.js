@@ -48,6 +48,25 @@ const app = express();
 // drives `req.ip`, which feeds rate-limiting and audit logs.
 app.set('trust proxy', 1);
 
+// ==================== HTTPS Redirect ====================
+// In production behind a TLS-terminating proxy (nginx / Cloudflare /
+// load balancer), the app receives plain HTTP and the original scheme
+// is in `x-forwarded-proto`. Bounce any HTTP request to HTTPS so the
+// `Secure` refresh cookie is actually usable and links stay https.
+// `trust proxy` (above) makes `req.secure` honour the forwarded proto.
+// Skipped entirely outside production so local http dev still works.
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const isHttps =
+      req.secure || forwardedProto === 'https';
+    if (isHttps) return next();
+    // Preserve method semantics: 308 keeps POST/PUT bodies intact on
+    // the redirect (a plain 301/302 would downgrade them to GET).
+    return res.redirect(308, `https://${req.headers.host}${req.originalUrl}`);
+  });
+}
+
 // Drop the `X-Powered-By: Express` header explicitly. Helmet does this
 // too, but having it before helmet kicks in covers any pre-helmet path.
 app.disable('x-powered-by');
