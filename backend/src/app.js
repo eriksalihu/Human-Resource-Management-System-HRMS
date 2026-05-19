@@ -163,9 +163,13 @@ app.use('/api/users', require('./routes/user.routes'));
 // Anything reaching this point hit no route — return a structured JSON 404
 // instead of Express's default HTML page.
 app.use('/api', (req, res) => {
+  // Standard error envelope (commit 273) — include statusCode + code
+  // so the 404 looks identical to every other API error.
   res.status(404).json({
     success: false,
     message: `API endpoint not found: ${req.method} ${req.originalUrl}`,
+    statusCode: 404,
+    code: 'ERR_NOT_FOUND',
   });
 });
 

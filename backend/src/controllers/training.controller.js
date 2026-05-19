@@ -404,9 +404,13 @@ const enroll = async (req, res, next) => {
         trainingId,
         employeeId
       );
+      // Soft conflict: surface the existing enrollment but keep the
+      // standard error envelope (success/message/statusCode/code).
       return res.status(409).json({
         success: false,
         message: 'Employee is already enrolled in this training',
+        statusCode: 409,
+        code: 'ERR_DUPLICATE',
         data: { participant: existing },
       });
     }
