@@ -28,7 +28,7 @@
  *     scrolling on iOS / Android (touch).
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * Tailwind size classes for the desktop dialog footprint. Phone view
@@ -40,6 +40,34 @@ const sizeClasses = {
   lg: 'sm:max-w-lg',
   xl: 'sm:max-w-xl',
 };
+
+/* ──────────────────────────────────────────────────────────────────── */
+/* Modal stack (commit 279 — fix nested-modal stacking)                  */
+/* ──────────────────────────────────────────────────────────────────── */
+
+/**
+ * Module-level stack of currently-open modal ids, in open order. Lets
+ * each modal know whether it's the TOP-MOST one.
+ *
+ * The bugs this fixes:
+ *   - Every Modal added its own `document` keydown listener, so Escape
+ *     fired ALL of them at once — opening a ConfirmDialog from inside
+ *     an edit Modal and pressing Escape closed both. `stopPropagation`
+ *     doesn't help: the listeners are siblings on the same node, not a
+ *     bubbling chain.
+ *   - All modals shared `z-50`, so a child's backdrop sat at the same
+ *     layer as the parent's and the stacking was ambiguous.
+ * Only the top-most modal now reacts to Escape / backdrop, and each
+ * modal's z-index steps up with its depth (kept well below the toast
+ * layer at z-100 so toasts/rate-limit banners still sit above modals).
+ */
+const modalStack = [];
+let modalSeq = 0;
+
+/** Base z for the first modal; each nested level adds 1. */
+const MODAL_Z_BASE = 50;
+/** Hard ceiling so modals never reach the toast layer (z-[100]). */
+const MODAL_Z_MAX = 90;
 
 /**
  * Find all focusable descendants of a container, in tab order. The
@@ -103,6 +131,30 @@ const Modal = ({
    * to it on close so keyboard users don't lose their place.
    */
   const previousActiveRef = useRef(null);
+  /** This modal's stable id within the open-modal stack. */
+  const idRef = useRef(null);
+  if (idRef.current === null) {
+    modalSeq += 1;
+    idRef.current = modalSeq;
+  }
+  /** Depth in the stack (0 = base). Drives the stepped z-index. */
+  const [depth, setDepth] = useState(0);
+
+  /** True only when this modal is the front-most one. */
+  const isTopmost = () =>
+    modalStack[modalStack.length - 1] === idRef.current;
+
+  // ─── Stack registration ────────────────────────────────────────────
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const myId = idRef.current;
+    modalStack.push(myId);
+    setDepth(modalStack.indexOf(myId));
+    return () => {
+      const i = modalStack.indexOf(myId);
+      if (i !== -1) modalStack.splice(i, 1);
+    };
+  }, [isOpen]);
 
   // ─── Body scroll lock + Escape key + focus management ───────────────
   useEffect(() => {
@@ -132,7 +184,11 @@ const Modal = ({
     const id = window.requestAnimationFrame(focusInside);
 
     // Keyboard handler — Escape closes; Tab/Shift+Tab cycle inside.
+    // Only the TOP-MOST modal reacts: every open Modal attaches its own
+    // document listener, so without this gate Escape (and focus
+    // trapping) would fire for the parent too when a child is open.
     const onKeyDown = (e) => {
+      if (!isTopmost()) return;
       if (e.key === 'Escape') {
         e.stopPropagation();
         onClose();
@@ -178,15 +234,30 @@ const Modal = ({
 
   const desktopSizeClass = sizeClasses[size] || sizeClasses.md;
 
+  // Stepped z-index: deeper modals sit above shallower ones, capped so
+  // they never reach the toast/rate-limit layer (z-100 / z-120).
+  const zIndex = Math.min(MODAL_Z_BASE + depth, MODAL_Z_MAX);
+
+  /**
+   * Backdrop click closes — but only when this is the front-most modal.
+   * A child modal's backdrop visually covers the parent's, but guarding
+   * on `isTopmost()` makes the intent explicit and prevents an
+   * edge-case parent close if events ever reach it.
+   */
+  const handleBackdropClick = () => {
+    if (closeOnBackdrop && isTopmost()) onClose();
+  };
+
   return (
     <div
-      className="fixed inset-0 z-50 flex sm:items-center sm:justify-center items-stretch justify-stretch"
+      className="fixed inset-0 flex sm:items-center sm:justify-center items-stretch justify-stretch"
+      style={{ zIndex }}
       role="presentation"
     >
       {/* Backdrop overlay */}
       <div
         className="fixed inset-0 bg-black/50 transition-opacity animate-[fadeIn_0.15s_ease-in-out]"
-        onClick={closeOnBackdrop ? onClose : undefined}
+        onClick={handleBackdropClick}
         aria-hidden="true"
       />
 
