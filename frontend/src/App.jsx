@@ -43,6 +43,7 @@ import MainLayout from './layouts/MainLayout';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import LoadingSpinner from './components/common/LoadingSpinner';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import RateLimitNotice from './components/common/RateLimitNotice';
 
 /**
  * Public auth pages — kept eager so the login screen paints without a
@@ -166,6 +167,10 @@ function App() {
         <ThemeProvider>
           <AuthProvider>
             <NotificationProvider>
+              {/* Always-mounted global 429 banner — registers itself
+                  with the axios interceptor and shows a retry-after
+                  countdown regardless of the active route. */}
+              <RateLimitNotice />
               <Routes>
                 {/* Public auth routes */}
                 <Route element={<AuthLayout />}>

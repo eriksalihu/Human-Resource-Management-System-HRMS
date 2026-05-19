@@ -105,6 +105,40 @@ export const setOnAuthFailure = (callback) => {
 };
 
 /* ──────────────────────────────────────────────────────────────────── */
+/* Rate-limit (429) coordination                                         */
+/* ──────────────────────────────────────────────────────────────────── */
+
+/**
+ * Optional callback invoked when the server returns 429. The UI layer
+ * (RateLimitNotice) registers it to show a banner + retry-after
+ * countdown. Mirrors the `onAuthFailure` bridge pattern.
+ *
+ * @type {((info: { retryAfterSec: number, message: string }) => void) | null}
+ */
+let onRateLimited = null;
+
+/**
+ * Epoch ms until which the client should hold off issuing requests
+ * (the server told us via Retry-After). 0 = not rate-limited.
+ */
+let rateLimitedUntil = 0;
+
+/**
+ * Register the rate-limit handler. Pass `null` to unregister.
+ *
+ * @param {((info: { retryAfterSec: number, message: string }) => void) | null} callback
+ */
+export const setOnRateLimited = (callback) => {
+  onRateLimited = typeof callback === 'function' ? callback : null;
+};
+
+/** Auth-recovery endpoints stay reachable even during a cooldown so a
+ *  session can still refresh / log out while throttled. */
+const isAuthRecoveryUrl = (url) =>
+  typeof url === 'string' &&
+  (url.includes('/auth/refresh-token') || url.includes('/auth/logout'));
+
+/* ──────────────────────────────────────────────────────────────────── */
 /* Refresh-flow concurrency primitives                                   */
 /* ──────────────────────────────────────────────────────────────────── */
 
@@ -318,6 +352,24 @@ axiosInstance.defaults.adapter = (config) => {
  */
 axiosInstance.interceptors.request.use(
   (config) => {
+    // Cooldown gate: if the server recently 429'd us, short-circuit
+    // further requests until Retry-After elapses instead of hammering
+    // the endpoint (which only resets/extends the window). Auth-
+    // recovery calls are exempt so the session can still self-heal.
+    if (
+      rateLimitedUntil > Date.now() &&
+      !isAuthRecoveryUrl(config.url)
+    ) {
+      const retryAfterSec = Math.ceil(
+        (rateLimitedUntil - Date.now()) / 1000
+      );
+      const err = new Error('Rate limited — request held back locally');
+      err.isRateLimited = true;
+      err.retryAfterSec = retryAfterSec;
+      err.config = config;
+      return Promise.reject(err);
+    }
+
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
@@ -355,6 +407,38 @@ axiosInstance.interceptors.response.use(
         error.code === 'ECONNABORTED'
           ? 'The request timed out. Please check your connection and try again.'
           : 'Unable to reach the server. Please check your connection and try again.';
+      return Promise.reject(error);
+    }
+
+    // Rate limited (429). Read Retry-After (seconds) — the backend
+    // limiter sets both the header and a `retry_after_seconds` body
+    // field. Arm the local cooldown gate + notify the UI so it can
+    // show a "Too many requests" banner with a live countdown.
+    if (status === 429) {
+      const headerRetry = Number(error.response.headers?.['retry-after']);
+      const bodyRetry = Number(
+        error.response.data?.retry_after_seconds
+      );
+      const retryAfterSec =
+        Number.isFinite(headerRetry) && headerRetry > 0
+          ? headerRetry
+          : Number.isFinite(bodyRetry) && bodyRetry > 0
+            ? bodyRetry
+            : 30; // sane default if the server omitted it
+      rateLimitedUntil = Date.now() + retryAfterSec * 1000;
+      const message =
+        error.response.data?.message ||
+        'Too many requests. Please slow down and try again shortly.';
+      error.isRateLimited = true;
+      error.retryAfterSec = retryAfterSec;
+      error.userMessage = message;
+      if (onRateLimited) {
+        try {
+          onRateLimited({ retryAfterSec, message });
+        } catch (cbErr) {
+          console.error('[axiosInstance] onRateLimited threw:', cbErr);
+        }
+      }
       return Promise.reject(error);
     }
 
