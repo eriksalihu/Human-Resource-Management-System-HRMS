@@ -344,6 +344,20 @@ axiosInstance.interceptors.response.use(
     const originalRequest = error.config || {};
     const status = error.response?.status;
 
+    // Network / no-response failure (server down, DNS, offline, CORS
+    // preflight reject, request timeout). axios surfaces these with no
+    // `error.response`. Normalize them so UI can show a friendly
+    // "can't reach the server" state instead of a raw axios string,
+    // and so callers can branch on a stable flag.
+    if (!error.response) {
+      error.isNetworkError = true;
+      error.userMessage =
+        error.code === 'ECONNABORTED'
+          ? 'The request timed out. Please check your connection and try again.'
+          : 'Unable to reach the server. Please check your connection and try again.';
+      return Promise.reject(error);
+    }
+
     // Bail fast for non-401 responses.
     if (status !== 401) {
       return Promise.reject(error);

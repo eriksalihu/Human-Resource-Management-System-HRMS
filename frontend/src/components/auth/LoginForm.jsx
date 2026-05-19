@@ -15,6 +15,31 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import LoadingSpinner from '../common/LoadingSpinner';
 
+/** localStorage key for the "remember me" preference + email. */
+const REMEMBER_KEY = 'hrms.rememberLogin';
+
+/**
+ * Read the persisted remember-me state. Returns `{ email, rememberMe }`.
+ * Only the EMAIL is ever stored — never the password. Bug fixed
+ * (commit 276): the checkbox + email were collected but never
+ * persisted, so "remember me" did nothing across reloads.
+ *
+ * @returns {{ email: string, rememberMe: boolean }}
+ */
+const loadRemembered = () => {
+  try {
+    const raw = localStorage.getItem(REMEMBER_KEY);
+    if (!raw) return { email: '', rememberMe: false };
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.email === 'string') {
+      return { email: parsed.email, rememberMe: true };
+    }
+  } catch {
+    /* corrupt entry — fall through to the empty default */
+  }
+  return { email: '', rememberMe: false };
+};
+
 /**
  * LoginForm — controlled login form with validation, password toggle, and
  * error shake animation. Backed by Tailwind keyframes added in
@@ -27,10 +52,14 @@ import LoadingSpinner from '../common/LoadingSpinner';
  * @returns {JSX.Element}
  */
 const LoginForm = ({ onSubmit }) => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    rememberMe: false,
+  const [formData, setFormData] = useState(() => {
+    // Restore a remembered email + checkbox state on mount.
+    const remembered = loadRemembered();
+    return {
+      email: remembered.email,
+      password: '',
+      rememberMe: remembered.rememberMe,
+    };
   });
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState(null);
@@ -116,6 +145,20 @@ const LoginForm = ({ onSubmit }) => {
     setSubmitError(null);
     try {
       await onSubmit(formData);
+      // Persist (or clear) the remember-me preference only AFTER a
+      // successful sign-in. Never store the password.
+      try {
+        if (formData.rememberMe) {
+          localStorage.setItem(
+            REMEMBER_KEY,
+            JSON.stringify({ email: formData.email })
+          );
+        } else {
+          localStorage.removeItem(REMEMBER_KEY);
+        }
+      } catch {
+        /* storage disabled / quota — non-fatal, login still succeeded */
+      }
     } catch (err) {
       const msg =
         err?.response?.data?.message ||
