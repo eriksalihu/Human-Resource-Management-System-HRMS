@@ -160,22 +160,12 @@ app.use(bodyStringLimit());
 app.use(sanitize());
 
 // ==================== Health Check ====================
-// Mounted before the auth-protected routes so liveness probes don't need
-// credentials. Each individual route module applies its own
-// `authenticate` / `authorize` middleware as appropriate.
-//
-// Commit 287: now DB-aware. When the database is unreachable the
-// endpoint returns 503 so external uptime monitors / load balancers
-// can flag the instance instead of seeing a misleading 200.
-const { pingDatabase } = require('./config/db');
-app.get('/api/health', async (req, res) => {
-  const dbUp = await pingDatabase();
-  res.status(dbUp ? 200 : 503).json({
-    status: dbUp ? 'ok' : 'degraded',
-    database: dbUp ? 'connected' : 'disconnected',
-    timestamp: new Date().toISOString(),
-  });
-});
+// Mounted before the auth-protected routes so liveness probes don't
+// need credentials. The route module (commit 288) reports server +
+// database status, uptime, version, and memory usage; it returns 503
+// when the database is unreachable so an upstream load balancer can
+// drain the instance until it recovers.
+app.use('/api/health', require('./routes/health.routes'));
 
 // ==================== API Routes ====================
 // Each route module attaches its own auth + role guards. Order here is
