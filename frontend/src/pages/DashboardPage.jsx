@@ -167,7 +167,7 @@ const DashboardPage = () => {
     <div className="p-4 sm:p-6 space-y-5 max-w-7xl mx-auto w-full">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">Dashboard</h1>
         <p className="text-sm text-gray-500">
           {user?.first_name
             ? `Welcome back, ${user.first_name}.`

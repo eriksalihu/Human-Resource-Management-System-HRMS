@@ -506,7 +506,7 @@ const SalaryList = ({ onAdd, onEdit, onView }) => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Salaries</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">Salaries</h1>
           <p className="text-sm text-gray-500 mt-1">
             Manage payroll records and payment statuses
           </p>

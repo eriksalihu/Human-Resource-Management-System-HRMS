@@ -203,7 +203,7 @@ const PerformancePage = () => {
     <div className="p-6 space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Performance Reviews</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">Performance Reviews</h1>
         <p className="text-sm text-gray-500">
           {isReviewer
             ? 'Author reviews for your team and track progress over periods'

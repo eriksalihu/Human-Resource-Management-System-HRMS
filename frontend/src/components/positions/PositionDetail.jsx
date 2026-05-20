@@ -120,7 +120,7 @@ const PositionDetail = ({
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-2xl font-bold text-gray-900">{position.emertimi}</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">{position.emertimi}</h2>
             {position.niveli && (
               <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
                 {position.niveli}

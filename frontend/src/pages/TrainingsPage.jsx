@@ -254,7 +254,7 @@ const TrainingsPage = () => {
     <div className="p-6 space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Trainings</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">Trainings</h1>
         <p className="text-sm text-gray-500">
           {isHR
             ? 'Manage the training catalog, rosters, and post-completion ratings'
