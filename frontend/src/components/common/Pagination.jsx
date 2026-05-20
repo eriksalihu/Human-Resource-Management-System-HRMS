@@ -29,6 +29,9 @@ import { useEffect, useRef, useState } from 'react';
 /**
  * Pagination — page navigation with jump + keyboard support.
  *
+ * Props mirror fields from the {@link import('../../types').ApiPagination}
+ * envelope returned by every list endpoint.
+ *
  * @param {Object} props
  * @param {number} props.currentPage - Active page (1-based)
  * @param {number} props.totalPages - Total number of pages

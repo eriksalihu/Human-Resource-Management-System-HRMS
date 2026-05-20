@@ -186,7 +186,7 @@ const EmployeeProfileSkeleton = () => (
  * almost never changes, so re-rendering it is pure waste.
  *
  * @param {Object} props
- * @param {Object} [props.employee] - Employee object from the API
+ * @param {import('../../types').Employee} [props.employee] - Employee record from the API
  * @param {boolean} [props.loading=false] - Render skeleton instead
  * @param {Function} [props.onEdit]
  * @param {Function} [props.onTerminate]
