@@ -143,6 +143,15 @@ app.use(
   })
 );
 
+// ==================== Input Length Guard ====================
+// Belt-and-braces defense (commit 284): reject any request whose body
+// contains a string field longer than the global cap, BEFORE it reaches
+// sanitisation / validation / controllers. Keeps pathological payloads
+// (and accidental gigabyte pastes) from ever touching the DB driver,
+// even on endpoints that haven't wired field-specific validation.
+const { bodyStringLimit } = require('./middleware/validate');
+app.use(bodyStringLimit());
+
 // ==================== Input Sanitization ====================
 // Walks req.body / req.query / req.params, trimming whitespace,
 // escaping HTML entities, and stripping `$`-prefixed operator keys.
