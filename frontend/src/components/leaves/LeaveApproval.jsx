@@ -46,6 +46,10 @@ const LeaveApproval = ({ departmentId, onChanged }) => {
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [actingId, setActingId] = useState(null); // per-row pending state
+  // Which decision is in flight for `actingId` — drives the inline
+  // spinner inside the active button (commit 289). Without this we
+  // can't tell whether the user clicked Approve or Reject.
+  const [actingDecision, setActingDecision] = useState(null);
   const [bulkAction, setBulkAction] = useState(null); // 'approve' | 'reject'
   const [bulkComment, setBulkComment] = useState('');
   const [bulkRunning, setBulkRunning] = useState(false);
@@ -104,6 +108,7 @@ const LeaveApproval = ({ departmentId, onChanged }) => {
    */
   const applyOne = async (row, decision) => {
     setActingId(row.id);
+    setActingDecision(decision);
     try {
       if (decision === 'approve') {
         await leaveRequestApi.approve(row.id);
@@ -127,6 +132,7 @@ const LeaveApproval = ({ departmentId, onChanged }) => {
       addToast(msg, 'error');
     } finally {
       setActingId(null);
+      setActingDecision(null);
     }
   };
 
@@ -208,16 +214,22 @@ const LeaveApproval = ({ departmentId, onChanged }) => {
             type="button"
             onClick={() => startBulk('approve')}
             disabled={selectedIds.size === 0 || bulkRunning}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
           >
+            {bulkRunning && bulkAction === 'approve' && (
+              <LoadingSpinner size="sm" color="white" />
+            )}
             Approve ({selectedIds.size})
           </button>
           <button
             type="button"
             onClick={() => startBulk('reject')}
             disabled={selectedIds.size === 0 || bulkRunning}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
           >
+            {bulkRunning && bulkAction === 'reject' && (
+              <LoadingSpinner size="sm" color="white" />
+            )}
             Reject ({selectedIds.size})
           </button>
           <button
@@ -340,16 +352,22 @@ const LeaveApproval = ({ departmentId, onChanged }) => {
                             type="button"
                             onClick={() => applyOne(row, 'approve')}
                             disabled={isActing || bulkRunning}
-                            className="px-2.5 py-1 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
                           >
-                            {isActing ? '…' : 'Approve'}
+                            {isActing && actingDecision === 'approve' && (
+                              <LoadingSpinner size="sm" color="white" />
+                            )}
+                            Approve
                           </button>
                           <button
                             type="button"
                             onClick={() => applyOne(row, 'reject')}
                             disabled={isActing || bulkRunning}
-                            className="px-2.5 py-1 text-xs font-medium rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
                           >
+                            {isActing && actingDecision === 'reject' && (
+                              <LoadingSpinner size="sm" color="white" />
+                            )}
                             Reject
                           </button>
                         </div>
