@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import * as employeeApi from '../../api/employeeApi';
+import TextareaWithCounter from '../common/TextareaWithCounter';
 
 /** Status options must match the Attendances.statusi ENUM. */
 const STATUS_OPTIONS = [
@@ -387,11 +388,12 @@ const AttendanceForm = ({
         >
           Notes
         </label>
-        <textarea
+        <TextareaWithCounter
           id="shenimet"
           rows={3}
           value={form.shenimet}
           onChange={handleChange('shenimet')}
+          maxLength={5000}
           placeholder="Optional — e.g. 'Doctor appointment, will make up hours Friday'"
           className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
         />

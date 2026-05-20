@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import axiosInstance from '../../api/axiosInstance';
 import LoadingSpinner from '../common/LoadingSpinner';
+import TextareaWithCounter from '../common/TextareaWithCounter';
 
 /**
  * DepartmentForm — controlled form for creating and updating departments.
@@ -144,12 +145,13 @@ const DepartmentForm = ({ initialData, onSubmit, onCancel, submitting = false })
         <label htmlFor="pershkrimi" className="block text-sm font-medium text-gray-700 mb-1">
           Description
         </label>
-        <textarea
+        <TextareaWithCounter
           id="pershkrimi"
           name="pershkrimi"
           rows={3}
           value={formData.pershkrimi}
           onChange={handleChange}
+          maxLength={5000}
           className={inputClass('pershkrimi')}
           placeholder="Short description of the department"
           disabled={submitting}

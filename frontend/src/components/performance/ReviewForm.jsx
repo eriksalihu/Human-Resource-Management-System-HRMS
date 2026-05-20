@@ -7,6 +7,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import * as employeeApi from '../../api/employeeApi';
 import useAuth from '../../hooks/useAuth';
+import TextareaWithCounter from '../common/TextareaWithCounter';
 
 /** Roles allowed to explicitly set the reviewer (`vleresues_id`). */
 const PRIVILEGED_ROLES = ['Admin', 'HR Manager'];
@@ -475,11 +476,12 @@ const ReviewForm = ({
         >
           Strengths
         </label>
-        <textarea
+        <TextareaWithCounter
           id="pikat_forta"
           rows={3}
           value={form.pikat_forta}
           onChange={handleChange('pikat_forta')}
+          maxLength={5000}
           placeholder="What did this employee do exceptionally well?"
           className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
         />
@@ -493,11 +495,12 @@ const ReviewForm = ({
         >
           Areas for development
         </label>
-        <textarea
+        <TextareaWithCounter
           id="pikat_dobta"
           rows={3}
           value={form.pikat_dobta}
           onChange={handleChange('pikat_dobta')}
+          maxLength={5000}
           placeholder="Where is there room for growth?"
           className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
         />
@@ -511,11 +514,12 @@ const ReviewForm = ({
         >
           Objectives for next period
         </label>
-        <textarea
+        <TextareaWithCounter
           id="objektivat"
           rows={3}
           value={form.objektivat}
           onChange={handleChange('objektivat')}
+          maxLength={5000}
           placeholder="Concrete, measurable goals for the next review cycle"
           className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
         />

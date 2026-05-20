@@ -10,6 +10,7 @@ import LoadingSpinner from '../common/LoadingSpinner';
 import ConfirmDialog from '../common/ConfirmDialog';
 import { useToast } from '../common/Toast';
 import useAuth from '../../hooks/useAuth';
+import TextareaWithCounter from '../common/TextareaWithCounter';
 
 /** Roles allowed to manage training rosters (status changes, edit, delete). */
 const HR_ROLES = ['Admin', 'HR Manager'];
@@ -676,10 +677,11 @@ const TrainingDetail = ({
             onChange={setRateValue}
             disabled={rateSubmitting}
           />
-          <textarea
+          <TextareaWithCounter
             rows={3}
             value={rateComment}
             onChange={(e) => setRateComment(e.target.value)}
+            maxLength={5000}
             placeholder="Optional feedback for the trainer / HR"
             className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
             disabled={rateSubmitting}

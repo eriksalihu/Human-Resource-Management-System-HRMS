@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import * as departmentApi from '../../api/departmentApi';
 import LoadingSpinner from '../common/LoadingSpinner';
+import TextareaWithCounter from '../common/TextareaWithCounter';
 
 /**
  * Common level suggestions shown in the level select. Free-text is also allowed
@@ -226,12 +227,13 @@ const PositionForm = ({ initialData, onSubmit, onCancel, submitting = false }) =
         <label htmlFor="pershkrimi" className="block text-sm font-medium text-gray-700 mb-1">
           Description
         </label>
-        <textarea
+        <TextareaWithCounter
           id="pershkrimi"
           name="pershkrimi"
           rows={3}
           value={formData.pershkrimi}
           onChange={handleChange}
+          maxLength={5000}
           className={inputClass('pershkrimi')}
           placeholder="Brief description of responsibilities and requirements"
           disabled={submitting}

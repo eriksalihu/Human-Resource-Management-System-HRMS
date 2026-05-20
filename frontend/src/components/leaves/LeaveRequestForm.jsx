@@ -9,6 +9,7 @@ import * as leaveRequestApi from '../../api/leaveRequestApi';
 import * as employeeApi from '../../api/employeeApi';
 import axiosInstance from '../../api/axiosInstance';
 import useAuth from '../../hooks/useAuth';
+import TextareaWithCounter from '../common/TextareaWithCounter';
 
 /** Leave type options (values must match LeaveRequests.lloji enum). */
 const TYPE_OPTIONS = [
@@ -598,11 +599,12 @@ const LeaveRequestForm = ({
         >
           Reason
         </label>
-        <textarea
+        <TextareaWithCounter
           id="arsyeja"
           rows={3}
           value={form.arsyeja}
           onChange={handleChange('arsyeja')}
+          maxLength={5000}
           placeholder="Optional — add context for the approver"
           className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
         />

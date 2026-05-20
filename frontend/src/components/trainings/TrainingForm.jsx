@@ -5,6 +5,7 @@
  */
 
 import { useState, useMemo } from 'react';
+import TextareaWithCounter from '../common/TextareaWithCounter';
 
 /** Status options must match Trainings.statusi ENUM. */
 const STATUS_OPTIONS = [
@@ -199,11 +200,12 @@ const TrainingForm = ({
         >
           Description
         </label>
-        <textarea
+        <TextareaWithCounter
           id="pershkrimi"
           rows={4}
           value={form.pershkrimi}
           onChange={handleChange('pershkrimi')}
+          maxLength={5000}
           placeholder="What participants will learn, prerequisites, expected outcomes…"
           className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
         />

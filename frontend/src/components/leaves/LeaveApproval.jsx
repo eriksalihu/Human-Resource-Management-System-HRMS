@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as leaveRequestApi from '../../api/leaveRequestApi';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { useToast } from '../common/Toast';
+import TextareaWithCounter from '../common/TextareaWithCounter';
 
 /** Tailwind classes per leave type for colored type pills. */
 const TYPE_BADGE_CLASS = {
@@ -388,10 +389,11 @@ const LeaveApproval = ({ departmentId, onChanged }) => {
               below — it will accompany the action in your toast confirmation.
             </p>
           </div>
-          <textarea
+          <TextareaWithCounter
             rows={3}
             value={bulkComment}
             onChange={(e) => setBulkComment(e.target.value)}
+            maxLength={5000}
             placeholder="Optional comment (e.g. 'Coverage confirmed with team lead')"
             className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
           />
