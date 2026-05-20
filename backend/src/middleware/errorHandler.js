@@ -45,6 +45,34 @@ const DB_ERROR_MAP = {
     message:
       'Cannot delete — other records still reference this resource',
   },
+  // Connection-layer failures (commit 287). When the DB is down or
+  // briefly unreachable, surface a 503 with a stable code so clients
+  // can show a "service unavailable" state instead of a generic 500.
+  ECONNREFUSED: {
+    statusCode: 503,
+    code: 'ERR_DB_UNAVAILABLE',
+    message: 'Database temporarily unavailable. Please retry shortly.',
+  },
+  ECONNRESET: {
+    statusCode: 503,
+    code: 'ERR_DB_UNAVAILABLE',
+    message: 'Database connection was reset. Please retry shortly.',
+  },
+  ETIMEDOUT: {
+    statusCode: 503,
+    code: 'ERR_DB_UNAVAILABLE',
+    message: 'Database request timed out. Please retry shortly.',
+  },
+  PROTOCOL_CONNECTION_LOST: {
+    statusCode: 503,
+    code: 'ERR_DB_UNAVAILABLE',
+    message: 'Database connection was lost. Please retry shortly.',
+  },
+  ER_CON_COUNT_ERROR: {
+    statusCode: 503,
+    code: 'ERR_DB_UNAVAILABLE',
+    message: 'Database is at capacity. Please retry shortly.',
+  },
 };
 
 /**
