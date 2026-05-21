@@ -6,8 +6,12 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "migrate": "node database/migrations/index.js",
+    "migrate:status": "node database/migrations/index.js --status",
+    "seed": "node database/seed.js",
     "test": "jest --runInBand --forceExit",
-    "test:watch": "jest --runInBand --watch"
+    "test:watch": "jest --runInBand --watch",
+    "backup": "node database/backup.js"
   },
   "keywords": ["hrms", "hr", "management", "express", "mysql"],
   "author": "Erik Salihu",
