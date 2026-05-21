@@ -21,6 +21,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const compression = require('compression');
+const rateLimit = require('express-rate-limit');
 
 const corsOptions = require('./config/cors');
 const errorHandler = require('./middleware/errorHandler');
@@ -76,6 +77,38 @@ app.disable('x-powered-by');
 // frame-ancestors, etc.). Configured per-environment internally.
 app.use(securityHeaders());
 app.use(cors(corsOptions));
+
+// ==================== Global Rate Limit ====================
+// Baseline per-IP ceiling on the whole API (commit 305 security pass).
+// The auth endpoints keep their own much stricter limiters layered on
+// top of this; this catch-all just prevents any non-auth endpoint from
+// being hammered without bound. Generous enough that a normal session
+// (dashboard + list browsing) never trips it. Health checks are exempt
+// so monitors/load balancers aren't throttled. The body matches the
+// `ERR_RATE_LIMITED` shape the frontend's 429 handler already expects.
+const GLOBAL_RATE_WINDOW_MS = 15 * 60 * 1000;
+const GLOBAL_RATE_MAX = 600;
+app.use(
+  '/api',
+  rateLimit({
+    windowMs: GLOBAL_RATE_WINDOW_MS,
+    max: GLOBAL_RATE_MAX,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.path === '/health',
+    handler: (req, res) => {
+      const retryAfterSec = Math.ceil(GLOBAL_RATE_WINDOW_MS / 1000);
+      res.set('Retry-After', String(retryAfterSec));
+      res.status(429).json({
+        success: false,
+        message: 'Too many requests. Please slow down and try again shortly.',
+        statusCode: 429,
+        code: 'ERR_RATE_LIMITED',
+        retry_after_seconds: retryAfterSec,
+      });
+    },
+  })
+);
 
 // ==================== Compression + Logging ====================
 // Compression tuned for JSON-heavy API traffic:
