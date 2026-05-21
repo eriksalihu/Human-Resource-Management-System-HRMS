@@ -214,7 +214,7 @@ const PerformancePage = () => {
       {/* Tabs (only shown when more than one is available) */}
       {availableTabs.length > 1 && (
         <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+          <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
             {availableTabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
