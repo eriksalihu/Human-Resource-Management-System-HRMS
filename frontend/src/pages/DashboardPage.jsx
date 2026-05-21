@@ -25,6 +25,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axiosInstance from '../api/axiosInstance';
 import * as dashboardApi from '../api/dashboardApi';
 import * as attendanceApi from '../api/attendanceApi';
 import StatCard from '../components/dashboard/StatCard';
@@ -39,6 +41,14 @@ import useAuth from '../hooks/useAuth';
 
 /** Roles that may see payroll-sensitive widgets / KPIs. */
 const HR_ROLES = ['Admin', 'HR Manager'];
+
+/** Time-of-day greeting based on the local hour. */
+const greetingFor = (date = new Date()) => {
+  const h = date.getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+};
 
 /** EUR currency formatter — matches the salaries page style. */
 const formatCurrency = (value) => {
@@ -79,13 +89,62 @@ const MONTH_LABELS = [
 const DashboardPage = () => {
   const { user } = useAuth() || {};
   const isHR = (user?.roles || []).some((r) => HR_ROLES.includes(r));
+  const navigate = useNavigate();
 
   const [overview, setOverview] = useState(null);
   const [charts, setCharts] = useState(null);
   const [recentCheckIns, setRecentCheckIns] = useState([]);
   const [loading, setLoading] = useState(true);
+  // System health: 'checking' | 'ok' | 'degraded'. Drives the status dot.
+  const [health, setHealth] = useState('checking');
 
   const { addToast } = useToast();
+
+  /**
+   * One-shot system-health probe for the status indicator. Best-effort:
+   * any failure (incl. the 503 the endpoint returns when the DB is
+   * down) reads as "degraded".
+   */
+  useEffect(() => {
+    let cancelled = false;
+    axiosInstance
+      .get('/health')
+      .then((res) => {
+        if (!cancelled) {
+          setHealth(res.data?.database === 'connected' ? 'ok' : 'degraded');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setHealth('degraded');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Quick actions — role-aware. Everyone can submit leave / check in;
+   *  only HR/Admin get the "Add employee" shortcut. */
+  const quickActions = [
+    ...(isHR
+      ? [
+          {
+            label: 'Add employee',
+            to: '/employees',
+            icon: 'M12 4v16m8-8H4',
+          },
+        ]
+      : []),
+    {
+      label: 'Submit leave',
+      to: '/leaves',
+      icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+    },
+    {
+      label: 'Check in',
+      to: '/attendance',
+      icon: 'M5 13l4 4L19 7',
+    },
+  ];
 
   /**
    * Load every read-only dashboard payload in parallel. Failures on any
@@ -165,15 +224,76 @@ const DashboardPage = () => {
 
   return (
     <div className="p-4 sm:p-6 space-y-5 max-w-7xl mx-auto w-full">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">Dashboard</h1>
-        <p className="text-sm text-gray-500">
-          {user?.first_name
-            ? `Welcome back, ${user.first_name}.`
-            : 'Welcome back.'}{' '}
-          Here's the latest across the organization.
-        </p>
+      {/* Header — personalized greeting, system-health dot, quick actions */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
+              {greetingFor()}
+              {user?.first_name ? `, ${user.first_name}` : ''}
+            </h1>
+            {/* System health indicator */}
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset
+                bg-gray-50 text-gray-600 ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700"
+              title={
+                health === 'ok'
+                  ? 'All systems operational'
+                  : health === 'degraded'
+                    ? 'Some services are degraded'
+                    : 'Checking system status…'
+              }
+              aria-live="polite"
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  health === 'ok'
+                    ? 'bg-emerald-500'
+                    : health === 'degraded'
+                      ? 'bg-rose-500'
+                      : 'bg-amber-400 animate-pulse'
+                }`}
+                aria-hidden="true"
+              />
+              {health === 'ok'
+                ? 'Operational'
+                : health === 'degraded'
+                  ? 'Degraded'
+                  : 'Checking…'}
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Here's the latest across the organization.
+          </p>
+        </div>
+
+        {/* Quick actions */}
+        <div className="flex flex-wrap items-center gap-2">
+          {quickActions.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              onClick={() => navigate(action.to)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 transition-colors"
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d={action.icon}
+                />
+              </svg>
+              {action.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* KPI strip — 1 col mobile → 2 col tablet (sm/md) → 4 col desktop.
