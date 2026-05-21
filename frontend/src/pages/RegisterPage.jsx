@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import RegisterForm from '../components/auth/RegisterForm';
+import * as authApi from '../api/authApi';
 
 /**
  * RegisterPage - Account creation page for new users
@@ -27,11 +28,12 @@ const RegisterPage = () => {
     try {
       setError('');
       setSuccess('');
-      // TODO: Call auth API service when available
-      console.log('Register attempt:', data.email);
+      await authApi.register(data);
       setSuccess('Account created successfully! You can now sign in.');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      setError(
+        err.response?.data?.message || 'Registration failed. Please try again.'
+      );
     }
   };
 
