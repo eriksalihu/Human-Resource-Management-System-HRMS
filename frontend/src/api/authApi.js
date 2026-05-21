@@ -105,4 +105,44 @@ export const getProfile = async () => {
   return data.data.user;
 };
 
-export default { login, register, logout, refreshToken, getProfile };
+/**
+ * Begin a password reset. The backend always responds with the same
+ * neutral message (no account-enumeration), so callers should show a
+ * single "check your inbox" state regardless of the result.
+ *
+ * @param {string} email
+ * @returns {Promise<Object>} The (neutral) response body
+ */
+export const forgotPassword = async (email) => {
+  const { data } = await axiosInstance.post('/auth/forgot-password', {
+    email,
+  });
+  return data;
+};
+
+/**
+ * Complete a password reset with the token from the email link.
+ * Rejects (4xx) with `code: 'ERR_RESET_TOKEN_INVALID'` when the token
+ * is missing / expired / already used, or a 422 with field errors when
+ * the new password fails the strength rules.
+ *
+ * @param {{ token: string, password: string }} args
+ * @returns {Promise<Object>} The success response body
+ */
+export const resetPassword = async ({ token, password }) => {
+  const { data } = await axiosInstance.post('/auth/reset-password', {
+    token,
+    password,
+  });
+  return data;
+};
+
+export default {
+  login,
+  register,
+  logout,
+  refreshToken,
+  getProfile,
+  forgotPassword,
+  resetPassword,
+};

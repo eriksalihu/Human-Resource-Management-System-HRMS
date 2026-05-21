@@ -51,6 +51,8 @@ import RateLimitNotice from './components/common/RateLimitNotice';
  */
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import ForgotPassword from './components/auth/ForgotPassword';
+import ResetPassword from './components/auth/ResetPassword';
 
 /**
  * Error pages — eager for the same reason. They're tiny and always
@@ -187,6 +189,30 @@ function App() {
                     element={
                       <LazyRoute name="register">
                         <RegisterPage />
+                      </LazyRoute>
+                    }
+                  />
+                  {/* Password-reset flow. The components render bare
+                      forms, so they're wrapped in the same card chrome
+                      LoginPage uses (AuthLayout only provides the
+                      centered container + branding). */}
+                  <Route
+                    path="/forgot-password"
+                    element={
+                      <LazyRoute name="forgot-password">
+                        <div className="bg-white dark:bg-gray-900 shadow-md rounded-xl p-8 border border-gray-200 dark:border-gray-800">
+                          <ForgotPassword />
+                        </div>
+                      </LazyRoute>
+                    }
+                  />
+                  <Route
+                    path="/reset-password"
+                    element={
+                      <LazyRoute name="reset-password">
+                        <div className="bg-white dark:bg-gray-900 shadow-md rounded-xl p-8 border border-gray-200 dark:border-gray-800">
+                          <ResetPassword />
+                        </div>
                       </LazyRoute>
                     }
                   />

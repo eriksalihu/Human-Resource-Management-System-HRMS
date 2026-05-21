@@ -1,21 +1,19 @@
 /**
  * @file frontend/src/components/auth/ForgotPassword.jsx
  * @description Forgot-password form — email input with validation, success confirmation panel, and back-to-login link
- * @author Dev A
+ * @author Dev A (original), Dev B (wired to the live endpoint)
  *
- * Endpoint contract: this component POSTs to `/api/auth/forgot-password`
- * with `{ email }`. The backend route doesn't exist yet — until it lands,
- * the form falls back to a friendly success message regardless (the
- * security-conscious "we won't tell you whether the email exists" pattern
- * is the right UX anyway), with the underlying error logged to the console.
- *
- * When the endpoint ships it'll trigger the password-reset flow via
- * `email.service.sendPasswordReset()` — already implemented in Day 29.
+ * Endpoint contract: POSTs to `/api/auth/forgot-password` with `{ email }`
+ * (live as of commit 292). The backend always returns the same neutral
+ * message, so the UI shows the same "check your inbox" success state
+ * regardless of whether the email matched an account — no enumeration
+ * oracle. Real transport failures are still swallowed (logged only) so
+ * the outcome is indistinguishable to the user.
  */
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import axiosInstance from '../../api/axiosInstance';
+import * as authApi from '../../api/authApi';
 import { isValidEmail } from '../../utils/validators';
 
 /**
@@ -54,7 +52,7 @@ const ForgotPassword = () => {
 
     setSubmitting(true);
     try {
-      await axiosInstance.post('/auth/forgot-password', { email: trimmed });
+      await authApi.forgotPassword(trimmed);
     } catch (err) {
       // Stay quiet — the user always sees the same outcome.
        
