@@ -189,6 +189,61 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+ * Cross-browser normalization (commit 308)
+ *
+ * Native form controls and scroll containers render inconsistently across
+ * engines. These rules smooth over the differences we actually hit while
+ * testing in Chrome, Firefox, Safari, and Edge — without stripping the
+ * native date / time pickers users rely on.
+ * ─────────────────────────────────────────────────────────────────── */
+
+/* Date / time inputs.
+ *
+ * Safari (and to a lesser extent Firefox) render <input type="date|time|
+ * month"> with their own UA font and a slightly different intrinsic height
+ * than our text inputs, so they sit misaligned next to a text field in the
+ * same flex / grid row. Force our font and pin the height to the
+ * `px-3 py-2 text-sm` baseline every other input uses (line-height 20px +
+ * 16px padding + 2px border = 38px). The native picker is left intact. */
+input[type='date'],
+input[type='time'],
+input[type='month'],
+input[type='week'],
+input[type='datetime-local'] {
+  font-family: inherit;
+  min-height: 2.375rem;
+}
+
+/* Webkit's calendar / clock trigger (Chrome, Safari, Edge) should show a
+ * pointer cursor like any other clickable affordance. Its color is already
+ * handled by `color-scheme`, so we deliberately don't filter the glyph. */
+::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+/* Firefox-only quirks: it paints a dotted inner ring inside buttons and a
+ * red glow on :invalid fields, both of which fight our own focus-visible
+ * outline and inline error styling. */
+::-moz-focus-inner {
+  border: 0;
+  padding: 0;
+}
+input:-moz-ui-invalid,
+select:-moz-ui-invalid,
+textarea:-moz-ui-invalid {
+  box-shadow: none;
+}
+
+/* Momentum scrolling for the horizontal/vertical scroll areas (table
+ * wrappers, the tab strips that use overflow-x-auto). Older Safari / iOS
+ * scroll feels janky without it; a harmless no-op in Chrome and Edge. */
+.overflow-x-auto,
+.overflow-y-auto,
+.overflow-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
  * Print styles
  *
  * Goal: when the user prints (or "Save as PDF") an employee profile, a
