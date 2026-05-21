@@ -75,6 +75,30 @@
     @apply bg-gray-950 text-gray-100;
   }
 
+  /* ───────────────────────────────────────────────────────────────────
+   * Focus-visible baseline (a11y, commit 295)
+   *
+   * Guarantees a clearly-visible focus ring for KEYBOARD users on any
+   * interactive element — even ones that didn't opt into a Tailwind
+   * `focus:ring-*`. `:focus-visible` (not `:focus`) means mouse clicks
+   * don't get a ring, only keyboard / programmatic focus does, so the
+   * affordance helps keyboard users without annoying pointer users.
+   * ─────────────────────────────────────────────────────────────────── */
+  :focus-visible {
+    outline: 2px solid #4f46e5; /* brand indigo-600 */
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  html.dark :focus-visible {
+    outline-color: #818cf8; /* indigo-400 — brighter on dark surfaces */
+  }
+  /* Components that already paint their own focus ring opt out of the
+     global outline to avoid a doubled ring. */
+  .focus\:ring-2:focus-visible,
+  [class*='focus:ring-']:focus-visible {
+    outline: none;
+  }
+
   /* Heading rhythm — Inter handles the hard work; we just lean on the
      custom `tight` line-height we added in the Tailwind config. */
   h1, h2, h3, h4, h5, h6 {

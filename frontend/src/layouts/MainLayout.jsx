@@ -80,6 +80,17 @@ const MainLayout = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+      {/* Skip-to-content link (a11y) — visually hidden until focused, so
+          keyboard / screen-reader users can jump past the navbar +
+          sidebar straight to the page content. Targets the
+          `#main-content` region (which has tabIndex={-1}). */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[200] focus:px-4 focus:py-2 focus:rounded-md focus:bg-indigo-600 focus:text-white focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+      >
+        Skip to main content
+      </a>
+
       {/* Top navbar (fixed) */}
       <Navbar onToggleSidebar={toggleSidebar} />
 
