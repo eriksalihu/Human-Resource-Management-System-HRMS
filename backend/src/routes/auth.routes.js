@@ -32,6 +32,11 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const authController = require('../controllers/auth.controller');
 const authenticate = require('../middleware/auth');
+const {
+  emailChain,
+  passwordChain,
+  extractValidationErrors,
+} = require('../middleware/validate');
 
 const router = express.Router();
 
@@ -164,21 +169,35 @@ router.post('/refresh-token', refreshLimiter, authController.refreshToken);
 
 /**
  * @route   POST /api/auth/forgot-password
- * @desc    Trigger a password-reset email (endpoint stub for now —
- *          actual handler ships when the reset flow's backend lands).
+ * @desc    Begin a password reset — emails a one-hour, single-use link.
  * @access  Public — rate-limited 3/hour per IP
  *
- * The route is declared so the limiter takes effect immediately; the
- * controller stub returns a 200 + neutral message so the response is
- * always indistinguishable from a real reset (no enumeration oracle).
+ * Always returns the same neutral 200 so it can't be used to enumerate
+ * which emails are registered.
  */
-router.post('/forgot-password', forgotPasswordLimiter, (req, res) => {
-  res.json({
-    success: true,
-    message:
-      'If an account exists for that email, a password-reset link has been sent.',
-  });
-});
+router.post(
+  '/forgot-password',
+  forgotPasswordLimiter,
+  emailChain(),
+  extractValidationErrors,
+  authController.forgotPassword
+);
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Complete a password reset with the token from the email link.
+ * @access  Public — rate-limited (reuses the forgot-password limiter)
+ *
+ * Body: { token: string, password: string }. The new password must meet
+ * the same strength rules as registration.
+ */
+router.post(
+  '/reset-password',
+  forgotPasswordLimiter,
+  passwordChain('password'),
+  extractValidationErrors,
+  authController.resetPassword
+);
 
 /**
  * @route   GET /api/auth/profile

@@ -15,11 +15,15 @@
 
 const authService = require('../services/auth.service');
 const tokenService = require('../services/token.service');
+const emailService = require('../services/email.service');
 const jwtConfig = require('../config/jwt');
 const User = require('../models/User');
 const Role = require('../models/Role');
 const AuditLog = require('../models/AuditLog');
 const { AppError } = require('../middleware/errorHandler');
+
+/** Public app origin used to build the reset link in the email. */
+const APP_URL = process.env.APP_URL || 'http://localhost:5173';
 
 /**
  * Lockout policy. Five strikes locks the account for fifteen minutes;
@@ -351,5 +355,88 @@ const getProfile = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, logout, refreshToken, getProfile };
+/**
+ * POST /api/auth/forgot-password
+ * Begin a password reset. ALWAYS returns the same neutral 200 message
+ * regardless of whether the email matched an account — so the endpoint
+ * is not a registration-enumeration oracle. When a match exists, a
+ * reset email is dispatched (or logged in dev) with a one-hour link.
+ */
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      throw new AppError('Email is required', 400);
+    }
+
+    const { user, rawToken } = await authService.requestPasswordReset(email);
+
+    // Fire the email only when a real account matched. Best-effort —
+    // an email failure must not change the response (still neutral) or
+    // leak that the address exists.
+    if (user && rawToken) {
+      const resetLink = `${APP_URL}/reset-password?token=${rawToken}`;
+      try {
+        await emailService.sendPasswordReset({
+          to: user.email,
+          firstName: user.first_name,
+          resetToken: resetLink,
+        });
+      } catch (mailErr) {
+        // eslint-disable-next-line no-console
+        console.error('[auth.forgotPassword] email dispatch failed:', mailErr.message);
+      }
+    }
+
+    const payload = {
+      success: true,
+      message:
+        'If an account exists for that email, a password-reset link has been sent.',
+    };
+    // Dev convenience: surface the token so the flow is testable without
+    // a configured SMTP server. NEVER in production.
+    if (process.env.NODE_ENV !== 'production' && rawToken) {
+      payload.devResetToken = rawToken;
+    }
+
+    res.json(payload);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/auth/reset-password
+ * Complete a password reset using the token from the email link.
+ * Validates the token, sets the new password, burns the token, and
+ * revokes the user's refresh tokens (handled in the service).
+ */
+const resetPassword = async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      throw new AppError('Reset token and new password are required', 400);
+    }
+
+    await authService.resetPassword(token, password);
+
+    res.json({
+      success: true,
+      message:
+        'Your password has been reset. You can now sign in with your new password.',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  logout,
+  refreshToken,
+  getProfile,
+  forgotPassword,
+  resetPassword,
+};
 module.exports.refreshCookieOptions = refreshCookieOptions;
