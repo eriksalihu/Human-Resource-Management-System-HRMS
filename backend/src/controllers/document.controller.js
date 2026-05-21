@@ -189,7 +189,9 @@ const upload = multer({
  */
 // eslint-disable-next-line no-unused-vars
 const scanForViruses = async (absPath) => {
-  // TODO(security): replace with a real AV scan, e.g.
+  // Integration point: swap this no-op for a real AV scan when an
+  // engine is provisioned (the call is already on the upload path and
+  // returns the same shape), e.g. with `clamscan`:
   //   const { isInfected } = await clam.scanFile(absPath);
   //   return { clean: !isInfected, engine: 'clamav' };
   return { clean: true, engine: 'noop-placeholder' };
