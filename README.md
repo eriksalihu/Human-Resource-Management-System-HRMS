@@ -53,14 +53,10 @@ This application provides a comprehensive solution for managing human resources 
 
 ### 1. Database
 
-Create the database, then run the migrations in order (they're numbered `001_…` → `021_…`):
+Create an empty database — the schema itself is applied by the migration runner in the next step:
 
 ```bash
 mysql -u root -p -e "CREATE DATABASE hrms CHARACTER SET utf8mb4;"
-# Apply migrations (any ordered runner works); e.g. with the mysql CLI:
-for f in backend/database/migrations/0*.sql; do mysql -u root -p hrms < "$f"; done
-# Optional: seed reference data (roles, demo records)
-for f in backend/database/seeds/*.sql; do mysql -u root -p hrms < "$f"; done
 ```
 
 ### 2. Backend
@@ -69,8 +65,12 @@ for f in backend/database/seeds/*.sql; do mysql -u root -p hrms < "$f"; done
 cd backend
 cp .env.example .env      # then edit with your DB credentials + secrets
 npm install
+npm run migrate           # apply the ordered migrations (001 → 021)
+npm run seed              # optional: load seed data, if any is present
 npm run dev               # nodemon on http://localhost:5000
 ```
+
+> Applied migrations are tracked in a `_migrations` table, so `npm run migrate` is safe to re-run — only pending files execute. Use `npm run migrate:status` to inspect what's been applied.
 
 ### 3. Frontend
 
@@ -80,7 +80,7 @@ npm install
 npm run dev               # Vite dev server on http://localhost:5173
 ```
 
-The frontend proxies API calls to `VITE_API_BASE_URL` (defaults to `http://localhost:5000/api`).
+The frontend calls the API at `VITE_API_BASE_URL` (defaults to `http://localhost:5000/api`).
 
 ## Environment Variables
 
@@ -119,8 +119,12 @@ The frontend proxies API calls to `VITE_API_BASE_URL` (defaults to `http://local
 |---------|-------------|
 | `npm run dev` | Start with nodemon (auto-reload) |
 | `npm start` | Start the production server |
+| `npm run migrate` | Apply pending SQL migrations (tracked in `_migrations`) |
+| `npm run migrate:status` | List which migrations have been applied |
+| `npm run seed` | Apply seed data from `database/seeds/` (no-op if absent) |
 | `npm test` | Run the Jest + Supertest suites (`--runInBand`) |
 | `npm run test:watch` | Run tests in watch mode |
+| `npm run backup` | Dump + gzip the database via `mysqldump` |
 
 > Integration tests hit a real database — point `DB_NAME` at a **disposable** schema: `DB_NAME=hrms_test npm test`.
 
@@ -170,8 +174,9 @@ Base path: `/api`. All endpoints (except `/api/health`, `/api/auth/*`) require a
 │   │   ├── app.js         # Express app assembly (exported for tests)
 │   │   └── server.js      # Listen-first bootstrap + background DB warmup
 │   ├── database/
-│   │   ├── migrations/    # Ordered SQL migrations (001 → 021)
-│   │   └── seeds/         # Seed data
+│   │   ├── migrations/    # Ordered SQL migrations (001 → 021) + index.js runner
+│   │   ├── seed.js        # Seed runner (applies database/seeds/*.sql when present)
+│   │   └── backup.js      # mysqldump + gzip backup script
 │   └── package.json
 ├── frontend/
 │   ├── src/
