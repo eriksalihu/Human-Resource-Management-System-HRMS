@@ -57,9 +57,11 @@ node database/migrations/index.js --down=021_create_password_reset_tokens_table.
 ```bash
 cd backend
 npm ci --omit=dev          # production install (no dev deps)
-cp .env.example .env        # then fill in production values (see §5)
+cp .env.example .env       # REQUIRED for production — fill in real values (see §5)
 NODE_ENV=production node src/server.js
 ```
+
+> A `.env` file is optional for local development (sensible defaults are built in), but **required** for production — you must set real JWT secrets, DB credentials, and CORS origins.
 
 ### Keep it running (PM2)
 
@@ -82,7 +84,7 @@ server {
   # ssl_certificate / ssl_certificate_key ...
 
   location / {
-    proxy_pass http://127.0.0.1:5000;
+    proxy_pass http://127.0.0.1:5001;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

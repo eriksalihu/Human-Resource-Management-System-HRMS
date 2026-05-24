@@ -63,12 +63,13 @@ mysql -u root -p -e "CREATE DATABASE hrms CHARACTER SET utf8mb4;"
 
 ```bash
 cd backend
-cp .env.example .env      # then edit with your DB credentials + secrets
 npm install
 npm run migrate           # apply the ordered migrations (001 → 021)
 npm run seed              # optional: load seed data, if any is present
-npm run dev               # nodemon on http://localhost:5000
+npm run dev               # nodemon on http://localhost:5001
 ```
+
+> No `.env` file is needed for local development — the app ships with sensible defaults (`root@localhost`, database `hrms_db`, port `5001`). Copy `.env.example` to `.env` only if you need to override something (e.g. a MySQL password).
 
 > Applied migrations are tracked in a `_migrations` table, so `npm run migrate` is safe to re-run — only pending files execute. Use `npm run migrate:status` to inspect what's been applied.
 
@@ -80,36 +81,40 @@ npm install
 npm run dev               # Vite dev server on http://localhost:5173
 ```
 
-The frontend calls the API at `VITE_API_BASE_URL` (defaults to `http://localhost:5000/api`).
+The frontend calls the API at `VITE_API_BASE_URL` (defaults to `/api`, routed through the Vite dev-server proxy to port `5001`).
 
 ## Environment Variables
 
 ### Backend (`backend/.env`)
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `PORT` | no | API port (default `5000`) |
-| `NODE_ENV` | no | `development` \| `production` \| `test` |
-| `DB_HOST` | yes | MySQL host |
-| `DB_PORT` | no | MySQL port (default `3306`) |
-| `DB_USER` | yes | MySQL user |
-| `DB_PASS` | yes | MySQL password |
-| `DB_NAME` | yes | Database name (use a disposable schema for tests, e.g. `hrms_test`) |
-| `JWT_SECRET` | yes | Access-token signing secret |
-| `JWT_REFRESH_SECRET` | yes | Refresh-token signing secret |
-| `JWT_EXPIRE` | no | Access-token TTL (default `15m`) |
-| `JWT_REFRESH_EXPIRE` | no | Refresh-token TTL (default `7d`) |
-| `CORS_ORIGIN` | no | Comma-separated allowed origins (default `http://localhost:5173`) |
-| `COOKIE_SAMESITE` | no | Override refresh-cookie SameSite (`none`/`lax`/`strict`) |
-| `APP_URL` | no | Public SPA origin used to build password-reset links |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | no | Email transport; when unset, emails are logged instead of sent |
+> All variables have sensible development defaults — a `.env` file is **optional** for local development. For production, copy `.env.example` to `.env` and fill in real values.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `PORT` | no | `5001` | API port |
+| `NODE_ENV` | no | `development` | `development` \| `production` \| `test` |
+| `DB_HOST` | no | `localhost` | MySQL host |
+| `DB_PORT` | no | `3306` | MySQL port |
+| `DB_USER` | no | `root` | MySQL user |
+| `DB_PASS` | no | *(empty)* | MySQL password |
+| `DB_NAME` | no | `hrms_db` | Database name (use a disposable schema for tests, e.g. `hrms_test`) |
+| `JWT_SECRET` | prod only | dev key | Access-token signing secret |
+| `JWT_REFRESH_SECRET` | prod only | dev key | Refresh-token signing secret |
+| `JWT_EXPIRE` | no | `15m` | Access-token TTL |
+| `JWT_REFRESH_EXPIRE` | no | `7d` | Refresh-token TTL |
+| `CORS_ORIGIN` | no | `http://localhost:5173` | Comma-separated allowed origins |
+| `COOKIE_SAMESITE` | no | auto | Override refresh-cookie SameSite (`none`/`lax`/`strict`) |
+| `APP_URL` | no | `http://localhost:5173` | Public SPA origin used to build password-reset links |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | no | — | Email transport; when unset, emails are logged instead of sent |
 
 ### Frontend (`frontend/.env`)
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_API_BASE_URL` | no | API base URL (default `http://localhost:5000/api`) |
-| `VITE_APP_VERSION` | no | Version stamp shown in the footer |
+> No `.env` file is needed — the defaults work out of the box with the Vite dev-server proxy.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `VITE_API_BASE_URL` | no | `/api` | API base URL (relative — routed through the Vite proxy to port `5001`) |
+| `VITE_APP_VERSION` | no | `1.0.0-dev` | Version stamp shown in the footer |
 
 ## Available Scripts
 
