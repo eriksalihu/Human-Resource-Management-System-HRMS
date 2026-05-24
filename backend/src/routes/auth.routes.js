@@ -200,6 +200,19 @@ router.post(
 );
 
 /**
+ * @route   PUT /api/auth/password
+ * @desc    Change the authenticated user's password (requires current password)
+ * @access  Private (Bearer token required)
+ */
+router.put(
+  '/password',
+  authenticate,
+  passwordChain('new_password'),
+  extractValidationErrors,
+  authController.changePassword
+);
+
+/**
  * @route   GET /api/auth/profile
  * @desc    Get authenticated user's profile with roles
  * @access  Private (Bearer token required)

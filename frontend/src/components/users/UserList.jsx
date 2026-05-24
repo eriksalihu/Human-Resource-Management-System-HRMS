@@ -396,7 +396,7 @@ const UserList = ({
                 Edit
               </button>
             )}
-            {row.is_active && (
+            {row.is_active ? (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -406,6 +406,8 @@ const UserList = ({
               >
                 Deactivate
               </button>
+            ) : (
+              <span className="text-gray-400 text-sm font-medium">Deactivated</span>
             )}
           </div>
         ),

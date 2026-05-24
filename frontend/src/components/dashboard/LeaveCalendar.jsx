@@ -69,12 +69,12 @@ const HR_ROLES = ['Admin', 'HR Manager', 'Department Manager'];
 
 /** Tailwind colors per leave type — drives the dots and the legend. */
 const TYPE_COLORS = {
-  annual:    { dot: 'bg-indigo-500',  text: 'text-indigo-700',  label: 'Annual' },
-  sick:      { dot: 'bg-rose-500',    text: 'text-rose-700',    label: 'Sick' },
+  annual:    { dot: 'bg-indigo-50',  text: 'text-indigo-700',  label: 'Annual' },
+  sick:      { dot: 'bg-rose-50',    text: 'text-rose-700',    label: 'Sick' },
   personal:  { dot: 'bg-sky-500',     text: 'text-sky-700',     label: 'Personal' },
   maternity: { dot: 'bg-pink-500',    text: 'text-pink-700',    label: 'Maternity' },
   paternity: { dot: 'bg-purple-500',  text: 'text-purple-700',  label: 'Paternity' },
-  unpaid:    { dot: 'bg-gray-500',    text: 'text-gray-700',    label: 'Unpaid' },
+  unpaid:    { dot: 'bg-gray-50',    text: 'text-gray-700',    label: 'Unpaid' },
 };
 
 /** ISO YYYY-MM-DD for a Date object. */
@@ -159,7 +159,7 @@ const LeaveCalendar = ({
       if (effectiveScope === 'all') {
         const result = await leaveRequestApi.getAll({
           page: 1,
-          limit: 200,
+          limit: 100,
           from_date: rangeStart,
           to_date: rangeEnd,
         });
@@ -359,7 +359,7 @@ const LeaveCalendar = ({
                   key={day}
                   onClick={() => handleDayClick(day, dayLeaves)}
                   className={`relative aspect-square text-[11px] flex flex-col items-center justify-center transition-colors ${
-                    inMonth ? 'bg-white' : 'bg-gray-50/60 text-gray-400'
+                    inMonth ? 'bg-white' : 'bg-gray-50 text-gray-400'
                   } ${dayLeaves.length > 0 ? 'hover:bg-indigo-50' : 'hover:bg-gray-50'} focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500`}
                   aria-label={
                     dayLeaves.length > 0

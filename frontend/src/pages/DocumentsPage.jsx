@@ -17,6 +17,9 @@ import useAuth from '../hooks/useAuth';
 /** Roles that may upload / edit / delete documents and see the expiry panel. */
 const HR_ROLES = ['Admin', 'HR Manager'];
 
+/** Roles that can view all-employee document lists. */
+const MANAGER_ROLES = ['Admin', 'HR Manager', 'Department Manager'];
+
 /** Lookahead window (days) for the expiring-documents warning panel. */
 const EXPIRY_WINDOW_DAYS = 30;
 
@@ -61,6 +64,7 @@ const daysUntil = (yyyyMmDd) => {
 const DocumentsPage = () => {
   const { user } = useAuth() || {};
   const isHR = (user?.roles || []).some((r) => HR_ROLES.includes(r));
+  const isManager = (user?.roles || []).some((r) => MANAGER_ROLES.includes(r));
 
   // Modal state
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -179,7 +183,7 @@ const DocumentsPage = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">Documents</h1>
+          <h1 className="text-2xl font-bold text-gray-900 truncate">Documents</h1>
           <p className="text-sm text-gray-500">
             {isHR
               ? 'Upload, preview, and manage employee documents'
@@ -228,7 +232,7 @@ const DocumentsPage = () => {
             </button>
           </div>
 
-          <ul className="mt-3 divide-y divide-amber-200/60 rounded-md bg-white/50">
+          <ul className="mt-3 divide-y divide-amber-200/60 rounded-md bg-white">
             {sortedExpiring.slice(0, 6).map((d) => {
               const remaining = daysUntil(d.data_skadimit);
               const overdue = remaining != null && remaining < 0;
@@ -286,6 +290,7 @@ const DocumentsPage = () => {
       {/* Document list */}
       <DocumentList
         key={refreshKey}
+        selfOnly={!isManager}
         onUpload={isHR ? handleOpenUpload : undefined}
         onEdit={isHR ? handleEdit : undefined}
         onView={handleView}

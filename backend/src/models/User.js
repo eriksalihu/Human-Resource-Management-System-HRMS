@@ -20,7 +20,7 @@ const ALLOWED_ORDER_DIRECTIONS = ['ASC', 'DESC'];
  * @param {string} [options.order='DESC'] - Sort direction
  * @returns {Promise<{ data: Array, pagination: Object }>}
  */
-const findAll = async ({ page = 1, limit = 10, search, sortBy = 'created_at', order = 'DESC' } = {}) => {
+const findAll = async ({ page = 1, limit = 10, search, sortBy = 'created_at', sortOrder, order = 'DESC' } = {}) => {
   const pageNum = parseInt(page) || 1;
   const limitNum = parseInt(limit) || 10;
   const offset = (pageNum - 1) * limitNum;
@@ -37,9 +37,10 @@ const findAll = async ({ page = 1, limit = 10, search, sortBy = 'created_at', or
   const [countResult] = await db.query(`SELECT COUNT(*) as total FROM (${query}) as t`, params);
   const total = countResult[0].total;
 
-  // Whitelist-validate sortBy and order
+  // Whitelist-validate sortBy and order (accept both `sortOrder` and `order`)
   const safeSortBy = ALLOWED_SORT_COLUMNS.includes(sortBy) ? sortBy : 'created_at';
-  const safeOrder = ALLOWED_ORDER_DIRECTIONS.includes(order?.toUpperCase()) ? order.toUpperCase() : 'DESC';
+  const rawOrder = sortOrder || order;
+  const safeOrder = ALLOWED_ORDER_DIRECTIONS.includes(rawOrder?.toUpperCase()) ? rawOrder.toUpperCase() : 'DESC';
 
   query += ` ORDER BY ${safeSortBy} ${safeOrder} LIMIT ? OFFSET ?`;
   params.push(limitNum, offset);
@@ -48,8 +49,8 @@ const findAll = async ({ page = 1, limit = 10, search, sortBy = 'created_at', or
   return {
     data: rows,
     pagination: {
-      page: pageNum,
-      limit: limitNum,
+      currentPage: pageNum,
+      perPage: limitNum,
       total,
       totalPages: Math.ceil(total / limitNum),
     },
@@ -124,6 +125,7 @@ const update = async (id, data) => {
 
   if (data.first_name !== undefined) { fields.push('first_name = ?'); params.push(data.first_name); }
   if (data.last_name !== undefined) { fields.push('last_name = ?'); params.push(data.last_name); }
+  if (data.email !== undefined) { fields.push('email = ?'); params.push(data.email); }
   if (data.phone !== undefined) { fields.push('phone = ?'); params.push(data.phone); }
   if (data.profile_image !== undefined) { fields.push('profile_image = ?'); params.push(data.profile_image); }
   if (data.is_active !== undefined) { fields.push('is_active = ?'); params.push(data.is_active); }

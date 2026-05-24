@@ -123,7 +123,7 @@ const SkillsProfile = ({ review }) => {
     {
       label: 'Performance',
       score: base,
-      tone: 'bg-indigo-500',
+      tone: 'bg-indigo-50',
     },
     {
       label: 'Strengths',
@@ -453,7 +453,7 @@ const Section = ({ title, text, accent = 'border-l-gray-300', empty }) => {
     >
       <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
       {trimmed ? (
-        <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">
+        <div className="mt-2 text-sm text-gray-700">
           <SafeText text={trimmed} mode="preserve" />
         </div>
       ) : (

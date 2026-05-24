@@ -120,7 +120,7 @@ const AttendanceCalendar = ({
     const load = async () => {
       try {
         const result = await employeeApi.getAll({
-          limit: 200,
+          limit: 100,
           statusi: 'active',
         });
         if (!cancelled) setEmployees(result.data || []);
@@ -142,7 +142,7 @@ const AttendanceCalendar = ({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { from_date: rangeStart, to_date: rangeEnd, limit: 200 };
+      const params = { from_date: rangeStart, to_date: rangeEnd, limit: 100 };
 
       let attendance = [];
       if (pinnedEmployeeId) {
@@ -378,7 +378,7 @@ const AttendanceCalendar = ({
                   key={day}
                   title={tooltip || undefined}
                   className={`min-h-[78px] border-t border-l border-gray-100 p-1.5 ${
-                    inMonth ? 'bg-white' : 'bg-gray-50/60'
+                    inMonth ? 'bg-white' : 'bg-gray-50'
                   }`}
                 >
                   <div className="flex items-center justify-between">

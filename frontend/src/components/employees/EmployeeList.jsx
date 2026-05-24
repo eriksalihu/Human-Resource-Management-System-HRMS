@@ -255,7 +255,7 @@ const VirtualizedEmployeeTable = ({
                 className={`grid items-center border-b border-gray-100 ${
                   onRowClick
                     ? 'cursor-pointer hover:bg-gray-50'
-                    : 'hover:bg-gray-50/50'
+                    : 'hover:bg-gray-50'
                 }`}
               >
                 {columns.map((c) => (
@@ -849,7 +849,7 @@ const EmployeeList = ({ onAdd, onEdit, onView }) => {
       {advancedOpen && (
         <div
           id="advanced-filters-panel"
-          className="rounded-lg border border-gray-200 bg-gray-50/50 p-4 space-y-4 animate-slide-in-down"
+          className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-4 animate-slide-in-down"
         >
           {/* Hire-date range */}
           <div>

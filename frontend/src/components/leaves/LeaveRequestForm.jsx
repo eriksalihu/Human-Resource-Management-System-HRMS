@@ -134,7 +134,7 @@ const LeaveRequestForm = ({
     const load = async () => {
       try {
         const result = await employeeApi.getAll({
-          limit: 200,
+          limit: 100,
           statusi: 'active',
         });
         if (!cancelled) setEmployees(result.data || []);
@@ -468,7 +468,7 @@ const LeaveRequestForm = ({
                       <div
                         className={`h-1 rounded-full ${
                           row.used_pct >= 100
-                            ? 'bg-rose-500'
+                            ? 'bg-rose-50'
                             : row.used_pct >= 80
                               ? 'bg-amber-500'
                               : 'bg-emerald-500'

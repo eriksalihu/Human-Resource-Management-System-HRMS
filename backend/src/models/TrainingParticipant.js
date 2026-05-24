@@ -45,6 +45,10 @@ const BASE_SELECT = `
  * (training_id, employee_id) unique key — returns
  * `{ alreadyEnrolled: true }` on duplicate instead of throwing.
  *
+ * If the employee was previously withdrawn (status 'dropped' or
+ * 'no-show'), the existing row is reactivated instead of inserting
+ * a duplicate.
+ *
  * @param {Object} data
  * @param {number} data.training_id
  * @param {number} data.employee_id
@@ -61,6 +65,21 @@ const enroll = async ({ training_id, employee_id, statusi = 'enrolled' }) => {
     return { id: result.insertId, alreadyEnrolled: false };
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
+      // Check if the existing row can be re-activated (dropped / no-show)
+      const [existing] = await db.query(
+        `SELECT id, statusi FROM TrainingParticipants
+         WHERE training_id = ? AND employee_id = ?`,
+        [training_id, employee_id]
+      );
+      const row = existing[0];
+      if (row && ['dropped', 'no-show'].includes(row.statusi)) {
+        await db.query(
+          `UPDATE TrainingParticipants SET statusi = ?, vleresimi = NULL
+           WHERE id = ?`,
+          [statusi, row.id]
+        );
+        return { id: row.id, alreadyEnrolled: false };
+      }
       return { id: null, alreadyEnrolled: true };
     }
     throw err;
@@ -149,13 +168,17 @@ const getByTraining = async (training_id, { statusi } = {}) => {
  * @param {string} [opts.statusi]
  * @returns {Promise<Object[]>}
  */
-const getByEmployee = async (employee_id, { statusi } = {}) => {
+const getByEmployee = async (employee_id, { statusi, includeDropped = false } = {}) => {
   const conditions = ['tp.employee_id = ?'];
   const params = [employee_id];
 
   if (statusi) {
     conditions.push('tp.statusi = ?');
     params.push(statusi);
+  } else if (!includeDropped) {
+    // By default hide dropped / no-show rows from "My Trainings" —
+    // withdrawn enrollments should disappear, not linger as "Dropped".
+    conditions.push("tp.statusi NOT IN ('dropped', 'no-show')");
   }
 
   const [rows] = await db.query(

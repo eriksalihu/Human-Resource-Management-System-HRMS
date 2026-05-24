@@ -187,13 +187,13 @@ const DefaultFallback = ({
   return (
     <div
       role="alert"
-      className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100"
+      className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center bg-white text-gray-900"
     >
-      <div className="max-w-lg w-full rounded-lg border border-rose-200 bg-rose-50 p-6 dark:bg-rose-500/10 dark:border-rose-500/30">
+      <div className="max-w-lg w-full rounded-lg border border-rose-200 bg-rose-50 p-6">
         {/* Icon */}
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-rose-200/70 dark:bg-rose-500/30">
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-rose-200/70">
           <svg
-            className="h-6 w-6 text-rose-700 dark:text-rose-300"
+            className="h-6 w-6 text-rose-700"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -208,10 +208,10 @@ const DefaultFallback = ({
           </svg>
         </div>
 
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+        <h2 className="text-lg font-semibold text-gray-900">
           {heading}
         </h2>
-        <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
+        <p className="mt-1 text-sm text-gray-700">
           {message}
         </p>
 
@@ -221,7 +221,7 @@ const DefaultFallback = ({
             <button
               type="button"
               onClick={onReload}
-              className="px-4 py-2 text-sm font-medium rounded-md bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700"
+              className="px-4 py-2 text-sm font-medium rounded-md bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
             >
               Reload page
             </button>
@@ -239,7 +239,7 @@ const DefaultFallback = ({
         {/* Dev-only stack panel — collapsible so it doesn't dominate the screen. */}
         {isDev && (error || errorInfo) && (
           <details className="mt-5 text-left">
-            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-gray-600">
               Error details (development only)
             </summary>
             {error?.stack && (

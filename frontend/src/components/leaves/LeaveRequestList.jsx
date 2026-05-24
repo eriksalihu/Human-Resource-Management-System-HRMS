@@ -113,7 +113,7 @@ const LeaveRequestList = ({
     let cancelled = false;
     const load = async () => {
       try {
-        const result = await employeeApi.getAll({ limit: 200, statusi: 'active' });
+        const result = await employeeApi.getAll({ limit: 100, statusi: 'active' });
         if (!cancelled) setEmployees(result.data || []);
       } catch {
         if (!cancelled) setEmployees([]);

@@ -106,7 +106,7 @@ const HelpTooltip = ({
         aria-describedby={open ? popoverId : undefined}
         onClick={() => setOpen((v) => !v)}
         onFocus={() => setOpen(true)}
-        className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold leading-none hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gray-200 text-gray-600 text-[10px] font-bold leading-none hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
       >
         ?
       </button>
@@ -115,7 +115,7 @@ const HelpTooltip = ({
         <span
           id={popoverId}
           role="tooltip"
-          className={`absolute z-50 w-52 max-w-[60vw] rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-snug text-white shadow-lg dark:bg-gray-700 ${sideClasses[side]}`}
+          className={`absolute z-50 w-52 max-w-[60vw] rounded-md bg-gray-900 px-3 py-2 text-xs font-normal leading-snug text-white shadow-lg ${sideClasses[side]}`}
         >
           {text}
         </span>

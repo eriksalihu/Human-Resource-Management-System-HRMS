@@ -321,7 +321,7 @@ const DepartmentOverview = ({
                   utilization == null
                     ? 'bg-gray-200'
                     : utilization >= 1
-                      ? 'bg-red-500'
+                      ? 'bg-red-50'
                       : utilization >= 0.85
                         ? 'bg-amber-500'
                         : 'bg-emerald-500';
@@ -329,7 +329,7 @@ const DepartmentOverview = ({
                 return (
                   <li
                     key={d.department_id}
-                    className="rounded-md border border-gray-100 bg-gray-50/40 p-3"
+                    className="rounded-md border border-gray-100 bg-gray-50 p-3"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0">

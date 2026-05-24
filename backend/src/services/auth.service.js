@@ -119,7 +119,14 @@ const changePassword = async (userId, oldPassword, newPassword) => {
 
   const isValid = await bcrypt.compare(oldPassword, user.password_hash);
   if (!isValid) {
-    throw new AppError('Current password is incorrect', 401);
+    // 403, not 401 — the user IS authenticated (valid JWT), but the
+    // supplied current password doesn't match.  Using 401 here would
+    // trick the axios interceptor into thinking the access token is
+    // expired, triggering a refresh-and-retry loop that ends in a
+    // forced logout instead of a friendly validation error.
+    const err = new AppError('Current password is incorrect', 403);
+    err.code = 'ERR_PASSWORD_MISMATCH';
+    throw err;
   }
 
   const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);

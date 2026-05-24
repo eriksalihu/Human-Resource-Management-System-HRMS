@@ -120,7 +120,9 @@ const passwordChain = (field = 'password', minLength = 8) =>
     .matches(/[A-Z]/)
     .withMessage('Password must contain at least one uppercase letter')
     .matches(/\d/)
-    .withMessage('Password must contain at least one number');
+    .withMessage('Password must contain at least one number')
+    .matches(/[^A-Za-z0-9]/)
+    .withMessage('Password must contain at least one special character');
 
 /**
  * Reusable string-length validation chain for VARCHAR-backed fields.

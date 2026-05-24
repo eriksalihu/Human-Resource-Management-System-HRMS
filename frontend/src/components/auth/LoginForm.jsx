@@ -1,31 +1,16 @@
 /**
  * @file frontend/src/components/auth/LoginForm.jsx
- * @description Enhanced login form — show/hide password toggle, animated form mount, error shake on failed submit, dark-mode styling, and improved disabled-while-loading state
- * @author Dev B
- *
- * The shake animation runs whenever a brand-new validation error or
- * server error appears (as opposed to existing errors getting cleared).
- * We attach an "errorTick" counter that bumps every time errors get set,
- * and the wrapper key swaps so React re-mounts the animated layer — this
- * makes the same error trigger a fresh shake even if the message text
- * didn't change.
+ * @description Login form — minimal, light-only. Show/hide password toggle,
+ *   animated mount, error shake on failed submit.
+ * @author Dev B (original), Dev A (minimal light-only redesign)
  */
 
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import LoadingSpinner from '../common/LoadingSpinner';
 
-/** localStorage key for the "remember me" preference + email. */
 const REMEMBER_KEY = 'hrms.rememberLogin';
 
-/**
- * Read the persisted remember-me state. Returns `{ email, rememberMe }`.
- * Only the EMAIL is ever stored — never the password. Bug fixed
- * (commit 276): the checkbox + email were collected but never
- * persisted, so "remember me" did nothing across reloads.
- *
- * @returns {{ email: string, rememberMe: boolean }}
- */
 const loadRemembered = () => {
   try {
     const raw = localStorage.getItem(REMEMBER_KEY);
@@ -35,25 +20,19 @@ const loadRemembered = () => {
       return { email: parsed.email, rememberMe: true };
     }
   } catch {
-    /* corrupt entry — fall through to the empty default */
+    /* corrupt entry */
   }
   return { email: '', rememberMe: false };
 };
 
 /**
- * LoginForm — controlled login form with validation, password toggle, and
- * error shake animation. Backed by Tailwind keyframes added in
- * `tailwind.config.js` (commit 190): `animate-shake` for the wrapper,
- * `animate-fade-in` for first paint, `animate-slide-in-down` for fields.
- *
+ * LoginForm — controlled login form (light-only).
  * @param {Object} props
- * @param {Function} props.onSubmit - Async callback `(formData) => Promise`.
- *   When the promise rejects, the form surfaces a generic error and shakes.
+ * @param {Function} props.onSubmit
  * @returns {JSX.Element}
  */
 const LoginForm = ({ onSubmit }) => {
   const [formData, setFormData] = useState(() => {
-    // Restore a remembered email + checkbox state on mount.
     const remembered = loadRemembered();
     return {
       email: remembered.email,
@@ -65,23 +44,9 @@ const LoginForm = ({ onSubmit }) => {
   const [submitError, setSubmitError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
-  /**
-   * Counter that increments every time we want the form to shake. The
-   * key on the shake-wrapper uses this so React re-mounts the element
-   * and re-runs the CSS animation even when the underlying error didn't
-   * change shape.
-   */
   const [shakeTick, setShakeTick] = useState(0);
-
-  /** Track whether we've ever rendered with errors so the first paint
-   *  doesn't trigger an unwarranted shake. */
   const firstRenderRef = useRef(true);
 
-  /**
-   * Bump the shake tick when validation or submit errors appear. Skip
-   * the very first render so an empty initial state doesn't shake.
-   */
   useEffect(() => {
     if (firstRenderRef.current) {
       firstRenderRef.current = false;
@@ -89,42 +54,30 @@ const LoginForm = ({ onSubmit }) => {
     }
     const hasErrors =
       Boolean(submitError) || Object.values(errors).some(Boolean);
-    if (hasErrors) {
-      setShakeTick((t) => t + 1);
-    }
+    if (hasErrors) setShakeTick((t) => t + 1);
   }, [errors, submitError]);
 
-  /**
-   * Validate fields. Returns the next-errors object so the caller can
-   * decide what to do with it (we use it both to set state and to
-   * inspect for a "had any error?" check).
-   */
   const validate = () => {
     const newErrors = {};
-
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email address';
     }
-
     if (!formData.password) {
       newErrors.password = 'Password is required';
     } else if (formData.password.length < 6) {
       newErrors.password = 'Password must be at least 6 characters';
     }
-
     return newErrors;
   };
 
-  /** Controlled input change. Clears matching field error + submit error. */
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
-
     if (errors[name]) {
       setErrors((prev) => {
         const { [name]: _omit, ...rest } = prev;
@@ -134,7 +87,6 @@ const LoginForm = ({ onSubmit }) => {
     if (submitError) setSubmitError(null);
   };
 
-  /** Form submit — runs validation, calls onSubmit, surfaces server errors. */
   const handleSubmit = async (e) => {
     e.preventDefault();
     const next = validate();
@@ -145,8 +97,6 @@ const LoginForm = ({ onSubmit }) => {
     setSubmitError(null);
     try {
       await onSubmit(formData);
-      // Persist (or clear) the remember-me preference only AFTER a
-      // successful sign-in. Never store the password.
       try {
         if (formData.rememberMe) {
           localStorage.setItem(
@@ -157,7 +107,7 @@ const LoginForm = ({ onSubmit }) => {
           localStorage.removeItem(REMEMBER_KEY);
         }
       } catch {
-        /* storage disabled / quota — non-fatal, login still succeeded */
+        /* storage disabled — non-fatal */
       }
     } catch (err) {
       const msg =
@@ -172,25 +122,24 @@ const LoginForm = ({ onSubmit }) => {
 
   return (
     <div
-      key={shakeTick} // forces re-mount → re-runs the shake animation
+      key={shakeTick}
       className={shakeTick > 0 ? 'animate-shake' : 'animate-fade-in'}
     >
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-        {/* Server-side error banner */}
         {submitError && (
           <div
             role="alert"
-            className="rounded-md p-3 text-sm bg-rose-50 text-rose-800 ring-1 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/30 animate-slide-in-down"
+            className="rounded-md p-3 text-sm bg-rose-50 text-rose-800 ring-1 ring-rose-200 animate-slide-in-down"
           >
             {submitError}
           </div>
         )}
 
-        {/* Email field */}
+        {/* Email */}
         <div className="animate-slide-in-down">
           <label
             htmlFor="email"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1"
+            className="block text-sm font-medium text-gray-700 mb-1"
           >
             Email address
           </label>
@@ -206,29 +155,25 @@ const LoginForm = ({ onSubmit }) => {
             aria-describedby={errors.email ? 'login-email-error' : undefined}
             className={`w-full px-4 py-2.5 rounded-lg text-sm border focus:outline-none focus:ring-2 transition-all duration-200
               bg-white text-gray-900 placeholder-gray-400 disabled:opacity-50 disabled:bg-gray-50
-              dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500 dark:disabled:bg-gray-800/50
               ${
                 errors.email
-                  ? 'border-rose-300 bg-rose-50 focus:ring-rose-400 focus:border-rose-400 dark:bg-rose-500/10 dark:border-rose-500/40'
-                  : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-700'
+                  ? 'border-rose-300 bg-rose-50 focus:ring-rose-400 focus:border-rose-400'
+                  : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500'
               }`}
             placeholder="you@example.com"
           />
           {errors.email && (
-            <p
-              id="login-email-error"
-              className="mt-1 text-xs text-rose-600 dark:text-rose-300"
-            >
+            <p id="login-email-error" className="mt-1 text-xs text-rose-600">
               {errors.email}
             </p>
           )}
         </div>
 
-        {/* Password field with show/hide toggle */}
+        {/* Password */}
         <div className="animate-slide-in-down">
           <label
             htmlFor="password"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1"
+            className="block text-sm font-medium text-gray-700 mb-1"
           >
             Password
           </label>
@@ -247,11 +192,10 @@ const LoginForm = ({ onSubmit }) => {
               }
               className={`w-full pl-4 pr-11 py-2.5 rounded-lg text-sm border focus:outline-none focus:ring-2 transition-all duration-200
                 bg-white text-gray-900 placeholder-gray-400 disabled:opacity-50 disabled:bg-gray-50
-                dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500 dark:disabled:bg-gray-800/50
                 ${
                   errors.password
-                    ? 'border-rose-300 bg-rose-50 focus:ring-rose-400 focus:border-rose-400 dark:bg-rose-500/10 dark:border-rose-500/40'
-                    : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-700'
+                    ? 'border-rose-300 bg-rose-50 focus:ring-rose-400 focus:border-rose-400'
+                    : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500'
                 }`}
               placeholder="Enter your password"
             />
@@ -262,54 +206,22 @@ const LoginForm = ({ onSubmit }) => {
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               aria-pressed={showPassword}
               tabIndex={-1}
-              className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-50 transition-colors"
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 disabled:opacity-50 transition-colors"
             >
               {showPassword ? (
-                // eye-off icon
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88L3 3m6.88 6.88L21 21"
-                  />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88L3 3m6.88 6.88L21 21" />
                 </svg>
               ) : (
-                // eye icon
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                  />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
               )}
             </button>
           </div>
           {errors.password && (
-            <p
-              id="login-password-error"
-              className="mt-1 text-xs text-rose-600 dark:text-rose-300"
-            >
+            <p id="login-password-error" className="mt-1 text-xs text-rose-600">
               {errors.password}
             </p>
           )}
@@ -324,22 +236,19 @@ const LoginForm = ({ onSubmit }) => {
               checked={formData.rememberMe}
               onChange={handleChange}
               disabled={loading}
-              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800"
+              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
             />
-            <span className="text-sm text-gray-600 dark:text-gray-300">
-              Remember me
-            </span>
+            <span className="text-sm text-gray-600">Remember me</span>
           </label>
-
           <Link
             to="/forgot-password"
-            className="text-sm font-medium text-indigo-600 hover:text-indigo-500 transition-colors dark:text-indigo-300 dark:hover:text-indigo-200"
+            className="text-sm font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
           >
             Forgot password?
           </Link>
         </div>
 
-        {/* Submit button */}
+        {/* Submit */}
         <button
           type="submit"
           disabled={loading}

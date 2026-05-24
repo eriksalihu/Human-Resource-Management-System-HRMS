@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as notificationApi from '../api/notificationApi';
+import useNotifications from '../hooks/useNotifications';
 import { SkeletonText } from '../components/common/SkeletonLoader';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useToast } from '../components/common/Toast';
@@ -168,11 +169,15 @@ const NotificationsPage = () => {
 
   const { addToast } = useToast();
 
+  // Sync the header badge (NotificationContext) after every local action
+  // so the bell icon count stays in lock-step with what this page shows.
+  const notificationCtx = useNotifications();
+
   /** Fetch the caller's notifications. */
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await notificationApi.getMyNotifications({ limit: 200 });
+      const result = await notificationApi.getMyNotifications({ limit: 100 });
       setRows(result?.notifications || []);
     } catch (err) {
       addToast(
@@ -210,7 +215,7 @@ const NotificationsPage = () => {
     if (row.is_read) return;
     setBusyId(row.id);
 
-    // Optimistic local update.
+    // Optimistic local update for the page list.
     const snapshot = rows;
     setRows((prev) =>
       prev.map((n) =>
@@ -221,7 +226,8 @@ const NotificationsPage = () => {
     );
 
     try {
-      await notificationApi.markAsRead(row.id);
+      // Context function does optimistic badge decrement + API call.
+      await notificationCtx.markAsRead(row.id);
     } catch (err) {
       setRows(snapshot);
       addToast(
@@ -241,6 +247,7 @@ const NotificationsPage = () => {
     }
     setBulkBusy(true);
 
+    const unreadInPage = counts.unread;
     const snapshot = rows;
     setRows((prev) =>
       prev.map((n) =>
@@ -249,9 +256,11 @@ const NotificationsPage = () => {
     );
 
     try {
-      const updated = await notificationApi.markAllAsRead();
+      // Context function optimistically sets unreadCount to 0 (badge clears
+      // instantly) AND makes the API call — no separate refresh round-trip.
+      await notificationCtx.markAllAsRead();
       addToast(
-        `Marked ${updated} notification${updated === 1 ? '' : 's'} as read`,
+        `Marked ${unreadInPage} notification${unreadInPage === 1 ? '' : 's'} as read`,
         'success'
       );
     } catch (err) {
@@ -272,7 +281,8 @@ const NotificationsPage = () => {
     const snapshot = rows;
     setRows((prev) => prev.filter((n) => n.id !== deleteTarget.id));
     try {
-      await notificationApi.remove(deleteTarget.id);
+      // Context function handles badge update if the deleted row was unread.
+      await notificationCtx.deleteNotification(deleteTarget.id);
       addToast('Notification deleted', 'success');
       setDeleteTarget(null);
     } catch (err) {
@@ -303,7 +313,7 @@ const NotificationsPage = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">Notifications</h1>
+          <h1 className="text-2xl font-bold text-gray-900 truncate">Notifications</h1>
           <p className="text-sm text-gray-500">
             Heads-up activity across HRMS — leave decisions, training updates,
             document expirations, and more.
@@ -433,7 +443,7 @@ const NotificationsPage = () => {
                       </h3>
                       {isUnread && (
                         <span
-                          className="inline-block h-2 w-2 rounded-full bg-indigo-500"
+                          className="inline-block h-2 w-2 rounded-full bg-indigo-50"
                           aria-label="Unread"
                         />
                       )}

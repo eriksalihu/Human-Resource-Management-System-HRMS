@@ -19,8 +19,8 @@ import { passwordStrengthScore } from '../../utils/validators';
 /** Per-score visual tones. Index = score (0..5). */
 const STRENGTH_TONES = [
   { label: 'Empty',  bar: 'bg-gray-200',     text: 'text-gray-500'    },
-  { label: 'Weak',   bar: 'bg-rose-500',     text: 'text-rose-700'    },
-  { label: 'Weak',   bar: 'bg-rose-500',     text: 'text-rose-700'    },
+  { label: 'Weak',   bar: 'bg-rose-50',     text: 'text-rose-700'    },
+  { label: 'Weak',   bar: 'bg-rose-50',     text: 'text-rose-700'    },
   { label: 'Fair',   bar: 'bg-amber-500',    text: 'text-amber-700'   },
   { label: 'Good',   bar: 'bg-emerald-500',  text: 'text-emerald-700' },
   { label: 'Strong', bar: 'bg-emerald-600',  text: 'text-emerald-800' },
@@ -119,7 +119,7 @@ const PasswordStrengthMeter = ({
             <div
               key={segment}
               className={`h-1.5 flex-1 rounded-full transition-colors duration-150 ${
-                segment <= filledSegments ? tone.bar : 'bg-gray-200 dark:bg-gray-700'
+                segment <= filledSegments ? tone.bar : 'bg-gray-200'
               }`}
             />
           ))}
@@ -127,7 +127,7 @@ const PasswordStrengthMeter = ({
 
         {showLabel && (
           <span
-            className={`text-[10px] font-semibold uppercase tracking-wide w-12 text-right tabular-nums ${tone.text} dark:opacity-90`}
+            className={`text-[10px] font-semibold uppercase tracking-wide w-12 text-right tabular-nums ${tone.text}`}
             aria-hidden="true"
           >
             {password ? tone.label : '—'}
@@ -137,7 +137,7 @@ const PasswordStrengthMeter = ({
 
       {/* Continuous-fill bar variant (mirrors the segmented one for visual
           richness on browsers that don't render thin gaps cleanly). */}
-      <div className="h-1 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+      <div className="h-1 w-full rounded-full bg-gray-100 overflow-hidden">
         <div
           className={`h-1 rounded-full transition-all duration-200 ${tone.bar}`}
           style={{ width: `${password ? widthPct : 0}%` }}
@@ -152,8 +152,8 @@ const PasswordStrengthMeter = ({
               key={rule.key}
               className={`flex items-center gap-1.5 ${
                 rule.passed
-                  ? 'text-emerald-700 dark:text-emerald-300'
-                  : 'text-gray-500 dark:text-gray-400'
+                  ? 'text-emerald-700'
+                  : 'text-gray-500'
               }`}
             >
               {rule.passed ? (

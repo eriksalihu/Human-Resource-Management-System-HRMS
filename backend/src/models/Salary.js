@@ -282,7 +282,7 @@ const getSalaryHistory = async (employeeId, year) => {
   }
 
   const [rows] = await db.query(
-    `SELECT viti, muaji, paga_baze, bonuse, zbritje, paga_neto, statusi, data_pageses
+    `SELECT id, viti, muaji, paga_baze, bonuse, zbritje, paga_neto, statusi, data_pageses
      FROM Salaries
      WHERE employee_id = ?
      ${yearFilter}

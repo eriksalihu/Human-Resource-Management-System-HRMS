@@ -60,6 +60,31 @@ const tokenError = (code, message, status = 401) => {
 };
 
 /**
+ * Normalise an IP address so that the various localhost representations
+ * (`::1`, `127.0.0.1`, `::ffff:127.0.0.1`) hash identically.  Without
+ * this, the Vite dev proxy can connect over IPv4 on one request and
+ * IPv6 on the next, causing fingerprint mismatches on subsequent
+ * authenticated calls.
+ */
+const normaliseIp = (raw) => {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  // All loopback variants → canonical '127.0.0.1'
+  if (
+    trimmed === '::1' ||
+    trimmed === '::ffff:127.0.0.1' ||
+    trimmed === '127.0.0.1'
+  ) {
+    return '127.0.0.1';
+  }
+  // Strip the IPv4-mapped IPv6 prefix for non-loopback addresses too
+  if (trimmed.startsWith('::ffff:')) {
+    return trimmed.slice('::ffff:'.length);
+  }
+  return trimmed;
+};
+
+/**
  * Extract a stable client-IP string from a request, honouring the
  * X-Forwarded-For chain when behind a reverse proxy.
  */
@@ -67,9 +92,9 @@ const ipFromRequest = (req) => {
   if (!req) return '';
   const xff = req.headers?.['x-forwarded-for'];
   if (xff) {
-    return String(xff).split(',')[0]?.trim() || '';
+    return normaliseIp(String(xff).split(',')[0]);
   }
-  return req.ip || req.connection?.remoteAddress || '';
+  return normaliseIp(req.ip || req.connection?.remoteAddress || '');
 };
 
 /**

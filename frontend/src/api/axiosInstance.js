@@ -42,7 +42,7 @@ import axios from 'axios';
 
 /** Base URL of the HRMS backend API (from Vite env with local fallback). */
 const BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+  import.meta.env.VITE_API_BASE_URL || '/api';
 
 /** Header name shared with the backend (`backend/src/middleware/auth.js`). */
 const REQUEST_ID_HEADER = 'x-request-id';
@@ -317,7 +317,7 @@ const axiosInstance = axios.create({
  *   3. Otherwise, kick off the real request and stash the promise so
  *      concurrent callers can attach. On settle, drop from the map.
  */
-const baseAdapter = axiosInstance.defaults.adapter;
+const baseAdapter = axios.getAdapter(axiosInstance.defaults.adapter);
 axiosInstance.defaults.adapter = (config) => {
   const key = buildDedupKey(config);
 

@@ -35,7 +35,7 @@ const STATUS_BADGE_CLASS = {
 /** Row-level highlight tone for problem statuses. */
 const ROW_HIGHLIGHT_CLASS = {
   late: 'bg-yellow-50/40',
-  absent: 'bg-red-50/40',
+  absent: 'bg-red-50',
 };
 
 /** Format an ISO-like date as DD/MM/YYYY. */
@@ -80,6 +80,9 @@ const formatHoursWorked = (value) => {
  * @param {Function} [props.onDelete] - Custom delete handler (default: API call)
  * @param {Object}   [props.defaultFilters]
  * @param {boolean}  [props.showAddButton=true]
+ * @param {boolean}  [props.selfOnly=false] - When true, fetches only the
+ *   authenticated user's own attendance via `/me` instead of the full
+ *   listing endpoint (which requires manager/admin roles).
  * @returns {JSX.Element}
  */
 const AttendanceList = ({
@@ -89,6 +92,7 @@ const AttendanceList = ({
   onDelete,
   defaultFilters = {},
   showAddButton = true,
+  selfOnly = false,
 }) => {
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({});
@@ -113,13 +117,15 @@ const AttendanceList = ({
 
   /**
    * Load active employees for the filter dropdown (once).
+   * Skipped in selfOnly mode — the user can only see their own records.
    */
   useEffect(() => {
+    if (selfOnly) return;
     let cancelled = false;
     const load = async () => {
       try {
         const result = await employeeApi.getAll({
-          limit: 200,
+          limit: 100,
           statusi: 'active',
         });
         if (!cancelled) setEmployees(result.data || []);
@@ -131,26 +137,43 @@ const AttendanceList = ({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selfOnly]);
 
   /**
    * Fetch attendance rows with the current filter / sort / paging state.
+   *
+   * In `selfOnly` mode the restricted `/attendances` endpoint is replaced
+   * by `/attendances/me`, which returns all rows for the authenticated
+   * employee without server-side pagination. Status and date filters are
+   * applied client-side so the UX stays the same.
    */
   const fetchRows = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await attendanceApi.getAll({
-        page,
-        limit,
-        employee_id: employeeId || undefined,
-        statusi: statusi || undefined,
-        from_date: fromDate || undefined,
-        to_date: toDate || undefined,
-        sortBy,
-        sortOrder,
-      });
-      setRows(result.data);
-      setPagination(result.pagination);
+      if (selfOnly) {
+        const result = await attendanceApi.getMyAttendance({
+          from_date: fromDate || undefined,
+          to_date: toDate || undefined,
+        });
+        let data = result?.attendance || [];
+        // Client-side status filter (the /me endpoint doesn't accept statusi).
+        if (statusi) data = data.filter((r) => r.statusi === statusi);
+        setRows(data);
+        setPagination({});
+      } else {
+        const result = await attendanceApi.getAll({
+          page,
+          limit,
+          employee_id: employeeId || undefined,
+          statusi: statusi || undefined,
+          from_date: fromDate || undefined,
+          to_date: toDate || undefined,
+          sortBy,
+          sortOrder,
+        });
+        setRows(result.data);
+        setPagination(result.pagination);
+      }
     } catch (err) {
       addToast(
         err.response?.data?.message || 'Failed to load attendance',
@@ -160,6 +183,7 @@ const AttendanceList = ({
       setLoading(false);
     }
   }, [
+    selfOnly,
     page,
     limit,
     employeeId,
@@ -376,7 +400,7 @@ const AttendanceList = ({
               Edit
             </button>
           )}
-          {(onDelete !== undefined || onDelete === undefined) && (
+          {!selfOnly && onEdit && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -468,17 +492,6 @@ const AttendanceList = ({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            disabled={rows.length === 0}
-            className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
-            </svg>
-            Export CSV
-          </button>
           {showAddButton && onAdd && (
             <button
               onClick={() => onAdd()}
@@ -504,14 +517,16 @@ const AttendanceList = ({
       </div>
 
       {/* Filters */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-        <FilterDropdown
-          label="Employee"
-          options={employeeOptions}
-          value={employeeId}
-          onChange={bumpPage(setEmployeeId)}
-          allLabel="All employees"
-        />
+      <div className={`grid grid-cols-1 gap-3 items-end ${selfOnly ? 'sm:grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-4'}`}>
+        {!selfOnly && (
+          <FilterDropdown
+            label="Employee"
+            options={employeeOptions}
+            value={employeeId}
+            onChange={bumpPage(setEmployeeId)}
+            allLabel="All employees"
+          />
+        )}
         <FilterDropdown
           label="Status"
           options={STATUS_OPTIONS}
@@ -602,7 +617,7 @@ const AttendanceList = ({
                     ? 'bg-emerald-500'
                     : summary.attendance_rate >= 60
                       ? 'bg-amber-500'
-                      : 'bg-rose-500'
+                      : 'bg-rose-50'
                 }`}
                 style={{
                   width: `${Math.max(0, Math.min(100, summary.attendance_rate))}%`,

@@ -150,7 +150,7 @@ const linkifyText = (text) => {
           href={safe}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-indigo-600 hover:text-indigo-800 underline dark:text-indigo-300 dark:hover:text-indigo-200"
+          className="text-indigo-600 hover:text-indigo-800 underline"
         >
           {part}
         </a>

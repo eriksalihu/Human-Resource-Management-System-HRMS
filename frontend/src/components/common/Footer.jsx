@@ -53,17 +53,17 @@ const Footer = () => {
   return (
     <footer
       role="contentinfo"
-      className="border-t bg-white text-gray-600 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-400 border-gray-200"
+      className="border-t bg-white text-gray-600 border-gray-200"
     >
       <div className="mx-auto max-w-7xl px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs">
         {/* Copyright */}
         <p className="order-2 sm:order-1">
           © {year}{' '}
-          <span className="font-medium text-gray-700 dark:text-gray-300">
+          <span className="font-medium text-gray-700">
             HRMS
           </span>{' '}
           · UBT Kolegji project ·{' '}
-          <span className="text-gray-500 dark:text-gray-500">
+          <span className="text-gray-500">
             All rights reserved.
           </span>
         </p>
@@ -79,7 +79,7 @@ const Footer = () => {
               href={link.href}
               target={link.external ? '_blank' : undefined}
               rel={link.external ? 'noopener noreferrer' : undefined}
-              className="hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors"
+              className="hover:text-indigo-600 transition-colors"
             >
               {link.label}
             </a>
@@ -88,7 +88,7 @@ const Footer = () => {
 
         {/* Version stamp */}
         <p
-          className="order-3 font-mono text-[10px] text-gray-400 dark:text-gray-500"
+          className="order-3 font-mono text-[10px] text-gray-400"
           title={`HRMS frontend build ${APP_VERSION}`}
         >
           v{APP_VERSION}

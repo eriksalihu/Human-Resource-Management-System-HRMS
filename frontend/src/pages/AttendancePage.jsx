@@ -16,6 +16,9 @@ import useAuth from '../hooks/useAuth';
 /** Roles allowed to create / edit / delete attendance records. */
 const HR_ROLES = ['Admin', 'HR Manager'];
 
+/** Roles that can view all employee attendance (full list endpoint). */
+const MANAGER_ROLES = ['Admin', 'HR Manager', 'Department Manager'];
+
 /** Top-level view modes. */
 const VIEWS = {
   LIST: 'list',
@@ -73,6 +76,7 @@ const csvCell = (value) => {
 const AttendancePage = () => {
   const { user } = useAuth() || {};
   const isHR = (user?.roles || []).some((r) => HR_ROLES.includes(r));
+  const isManager = (user?.roles || []).some((r) => MANAGER_ROLES.includes(r));
 
   const [view, setView] = useState(VIEWS.LIST);
 
@@ -252,7 +256,7 @@ const AttendancePage = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">Attendance</h1>
+          <h1 className="text-2xl font-bold text-gray-900 truncate">Attendance</h1>
           <p className="text-sm text-gray-500">
             Daily check-ins, monthly visualization, and HR reporting
           </p>
@@ -397,9 +401,12 @@ const AttendancePage = () => {
             onEdit={handleEdit}
           />
         ) : (
-          // Non-HR: read-only list, no add/edit/delete buttons
+          // Non-HR: read-only list, no add/edit/delete buttons.
+          // Employee-only users get `selfOnly` so the list fetches
+          // from /me instead of the restricted /attendances endpoint.
           <AttendanceList
             key={refreshKey}
+            selfOnly={!isManager}
             showAddButton={false}
             onAdd={undefined}
             onEdit={undefined}

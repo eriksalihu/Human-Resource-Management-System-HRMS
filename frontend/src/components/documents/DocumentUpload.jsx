@@ -172,7 +172,7 @@ const DocumentUpload = ({
       setLoadingEmployees(true);
       try {
         const result = await employeeApi.getAll({
-          limit: 200,
+          limit: 100,
           statusi: 'active',
         });
         if (!cancelled) setEmployees(result.data || []);

@@ -132,7 +132,7 @@ const SalaryTab = ({ employeeId }) => {
       try {
         const { data } = await axiosInstance.get(`/salaries/employee/${employeeId}`);
         if (cancelled) return;
-        setRows(data.data?.salaries || data.data || []);
+        setRows(data.data?.history || []);
       } catch (err) {
         if (cancelled) return;
         setError(err.response?.data?.message || 'Failed to load salary history');
@@ -164,8 +164,8 @@ const SalaryTab = ({ employeeId }) => {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {rows.map((s) => (
-            <tr key={s.id}>
+          {rows.map((s, idx) => (
+            <tr key={s.id ?? `${s.viti}-${s.muaji}-${idx}`}>
               <td className="px-4 py-2 text-gray-900">
                 {s.muaji}/{s.viti}
               </td>
@@ -173,10 +173,10 @@ const SalaryTab = ({ employeeId }) => {
                 {formatCurrency(s.paga_baze)}
               </td>
               <td className="px-4 py-2 text-right text-gray-700">
-                {formatCurrency(s.bonuset)}
+                {formatCurrency(s.bonuse)}
               </td>
               <td className="px-4 py-2 text-right text-gray-700">
-                {formatCurrency(s.zbritjet)}
+                {formatCurrency(s.zbritje)}
               </td>
               <td className="px-4 py-2 text-right font-medium text-gray-900">
                 {formatCurrency(s.paga_neto)}
@@ -377,15 +377,15 @@ const PerformanceTab = ({ employeeId }) => {
               Review period: {r.periudha || '—'}
             </p>
             <p className="text-xs text-gray-500 mt-1">
-              By {r.reviewer_first_name} {r.reviewer_last_name} · {formatDate(r.data_review)}
+              By {r.reviewer_first_name} {r.reviewer_last_name} · {formatDate(r.data_vleresimit)}
             </p>
             {r.pikat_forta && (
               <p className="text-sm text-gray-700 mt-2 line-clamp-2">{r.pikat_forta}</p>
             )}
           </div>
-          {r.vleresimi != null && (
+          {r.nota != null && (
             <span className="inline-flex items-center rounded-full bg-yellow-50 px-2.5 py-1 text-xs font-medium text-yellow-800">
-              ★ {Number(r.vleresimi).toFixed(1)}
+              ★ {Number(r.nota).toFixed(1)}
             </span>
           )}
         </li>
@@ -440,7 +440,7 @@ const DocumentsTab = ({ employeeId }) => {
         <li key={d.id} className="px-4 py-3 flex items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">
-              {d.emri || d.file_name || 'Document'}
+              {d.emertimi || 'Document'}
             </p>
             <p className="text-xs text-gray-500">
               {d.lloji || 'file'} · uploaded {formatDate(d.created_at)}

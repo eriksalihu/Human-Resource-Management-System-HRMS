@@ -83,6 +83,18 @@ router.get(
 );
 
 /**
+ * @route   POST /api/salaries/generate
+ * @desc    Auto-generate monthly payroll from position salary bands
+ * @access  Private (Admin, HR Manager)
+ */
+router.post(
+  '/generate',
+  authorize(['Admin', 'HR Manager']),
+  auditLog(),
+  salaryController.generateMonthlyPayroll
+);
+
+/**
  * @route   POST /api/salaries/bulk
  * @desc    Bulk create salary records for month-end payroll
  * @access  Private (Admin, HR Manager)

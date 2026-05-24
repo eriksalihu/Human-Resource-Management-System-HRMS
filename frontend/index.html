@@ -5,33 +5,6 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!--
-      Content-Security-Policy meta tag.
-      Defense-in-depth alongside the backend headers (`backend/src/middleware/helmet.js`).
-      The backend can't set CSP headers on the static HTML served by Vite
-      directly, so this meta tag covers the SPA shell. Same directives as
-      the API config — keep these in sync if you change one.
-
-      style-src includes 'unsafe-inline' because Tailwind's preflight uses
-      inline styles. script-src stays 'self' to block injected <script>.
-      connect-src includes the Vite dev server (5173) and the API host.
-    -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="
-        default-src 'self';
-        script-src 'self';
-        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-        font-src 'self' https://fonts.gstatic.com data:;
-        img-src 'self' data: blob:;
-        connect-src 'self' http://localhost:5000 https://localhost:5000;
-        object-src 'none';
-        base-uri 'self';
-        form-action 'self';
-        frame-ancestors 'none';
-      "
-    />
-
     <!-- Don't leak referrer paths on cross-origin navigations. -->
     <meta name="referrer" content="strict-origin-when-cross-origin" />
 

@@ -55,7 +55,7 @@ const STATUS_META = [
   { key: 'remote',   label: 'Remote',   bar: 'bg-sky-500',     tone: 'text-sky-700'    },
   { key: 'late',     label: 'Late',     bar: 'bg-amber-500',   tone: 'text-amber-700'  },
   { key: 'half_day', label: 'Half day', bar: 'bg-orange-400',  tone: 'text-orange-700' },
-  { key: 'absent',   label: 'Absent',   bar: 'bg-rose-500',    tone: 'text-rose-700'   },
+  { key: 'absent',   label: 'Absent',   bar: 'bg-rose-50',    tone: 'text-rose-700'   },
 ];
 
 /** Format a HH:MM:SS time as HH:MM. */

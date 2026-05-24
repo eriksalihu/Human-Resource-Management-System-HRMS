@@ -257,7 +257,7 @@ const getRecentActivities = async ({ limit = 10 } = {}) => {
     `SELECT
        al.id,
        al.action,
-       al.entity,
+       al.entity_type AS entity,
        al.entity_id,
        al.user_id,
        CONCAT_WS(' ', u.first_name, u.last_name) AS user_name,

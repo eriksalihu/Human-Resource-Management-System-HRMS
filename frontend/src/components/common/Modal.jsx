@@ -29,6 +29,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Tailwind size classes for the desktop dialog footprint. Phone view
@@ -248,9 +249,9 @@ const Modal = ({
     if (closeOnBackdrop && isTopmost()) onClose();
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 flex sm:items-center sm:justify-center items-stretch justify-stretch"
+      className="fixed inset-0 flex sm:items-start sm:justify-center items-stretch justify-stretch"
       style={{ zIndex }}
       role="presentation"
     >
@@ -264,8 +265,9 @@ const Modal = ({
       {/*
         Modal container.
         Mobile (< sm): occupies the entire viewport with slide-up
-        animation. Desktop (≥ sm): centered dialog with size variant,
-        rounded corners, and fade-in animation.
+        animation. Desktop (≥ sm): top-aligned dialog with size variant,
+        rounded corners, fade-in animation, and max-h-[78vh] so tall
+        forms (e.g. Performance Review) scroll within the dialog.
         `tabIndex={-1}` lets us programmatically focus it when nothing
         inside is focusable.
       */}
@@ -273,9 +275,9 @@ const Modal = ({
         ref={dialogRef}
         tabIndex={-1}
         className={`
-          relative z-10 flex flex-col bg-white dark:bg-gray-900 shadow-xl
-          w-full h-full
-          sm:h-auto sm:max-h-[90vh] sm:w-full sm:mx-4 sm:rounded-xl
+          relative z-10 flex flex-col bg-white shadow-xl
+          w-full h-full overflow-hidden
+          sm:h-auto sm:max-h-[78vh] sm:overflow-y-auto sm:w-full sm:mx-4 sm:mt-[5vh] sm:mb-4 sm:rounded-xl
           ${desktopSizeClass}
           animate-[slideUp_0.2s_ease-out] sm:animate-[fadeIn_0.2s_ease-in-out]
           focus:outline-none
@@ -285,17 +287,17 @@ const Modal = ({
         aria-labelledby="modal-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <h3
             id="modal-title"
-            className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate"
+            className="text-lg font-semibold text-gray-900 truncate"
           >
             {title}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 dark:focus:ring-offset-gray-900"
+            className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
             aria-label="Close modal"
           >
             <svg
@@ -316,9 +318,10 @@ const Modal = ({
         </div>
 
         {/* Body — scrollable when content overflows */}
-        <div className="px-6 py-4 overflow-y-auto flex-1">{children}</div>
+        <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

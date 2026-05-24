@@ -47,10 +47,10 @@ const { sameSite: COOKIE_SAMESITE, secure: COOKIE_SECURE } =
 
 const jwtConfig = {
   /** Access token secret from environment */
-  accessTokenSecret: process.env.JWT_SECRET,
+  accessTokenSecret: process.env.JWT_SECRET || 'hrms_jwt_secret_key_dev_2026',
 
   /** Refresh token secret from environment */
-  refreshTokenSecret: process.env.JWT_REFRESH_SECRET,
+  refreshTokenSecret: process.env.JWT_REFRESH_SECRET || 'hrms_jwt_refresh_secret_key_dev_2026',
 
   /** Access token expiry — short-lived (15 minutes) */
   accessTokenExpiry: process.env.JWT_EXPIRE || '15m',

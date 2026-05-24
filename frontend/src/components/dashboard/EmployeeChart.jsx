@@ -247,12 +247,12 @@ const EmployeeChart = ({
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 dark:bg-gray-900 dark:border-gray-800">
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+        <h3 className="text-sm font-semibold text-gray-900">
           {title}
         </h3>
-        <span className="text-xs text-gray-500 dark:text-gray-400">
+        <span className="text-xs text-gray-500">
           {data.length} department{data.length === 1 ? '' : 's'}
         </span>
       </div>
@@ -262,7 +262,7 @@ const EmployeeChart = ({
           <ChartSkeleton height={height} />
         ) : data.length === 0 ? (
           <div
-            className="flex flex-col justify-center items-center text-center text-sm text-gray-500 dark:text-gray-400"
+            className="flex flex-col justify-center items-center text-center text-sm text-gray-500"
             style={{ height: `${height}px` }}
           >
             <p>{emptyMessage}</p>
@@ -287,7 +287,7 @@ const EmployeeChart = ({
                     // Class-based stroke so the gridline adapts to dark
                     // mode instead of a fixed light-grey hex that was
                     // near-invisible on the dark card.
-                    className="stroke-gray-200 dark:stroke-gray-700"
+                    className="stroke-gray-200"
                     strokeDasharray={idx === 0 ? '0' : '4 4'}
                   />
                   <text
@@ -295,7 +295,7 @@ const EmployeeChart = ({
                     y={tick.y}
                     textAnchor="end"
                     dominantBaseline="middle"
-                    className="fill-gray-500 dark:fill-gray-400 text-[10px]"
+                    className="fill-gray-500 text-[10px]"
                   >
                     {formatCompact(tick.value)}
                   </text>
@@ -382,7 +382,7 @@ const EmployeeChart = ({
                         x={bar.x + bar.width / 2}
                         y={bar.y - 6}
                         textAnchor="middle"
-                        className="fill-gray-700 dark:fill-gray-200 text-[10px] font-semibold"
+                        className="fill-gray-700 text-[10px] font-semibold"
                       >
                         {bar.value}
                       </text>
@@ -392,7 +392,7 @@ const EmployeeChart = ({
                       x={bar.x + bar.width / 2}
                       y={geometry.padding.top + geometry.innerHeight + 16}
                       textAnchor="middle"
-                      className="fill-gray-600 dark:fill-gray-300 text-[10px]"
+                      className="fill-gray-600 text-[10px]"
                     >
                       {bar.emertimi.length > 12
                         ? `${bar.emertimi.slice(0, 11)}…`

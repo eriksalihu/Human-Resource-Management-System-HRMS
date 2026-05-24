@@ -85,7 +85,7 @@ const PayrollSummary = () => {
     try {
       const [companyResp, deptsResp] = await Promise.all([
         salaryApi.getPayrollSummary({ muaji, viti }),
-        departmentApi.getAll({ limit: 200 }),
+        departmentApi.getAll({ limit: 100 }),
       ]);
 
       setSummary(companyResp?.summary || null);

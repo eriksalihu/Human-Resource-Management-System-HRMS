@@ -97,9 +97,9 @@ const specialLeavePhrase = (action) => {
 /** Tone classes per verb — drives the timeline rail dot color. */
 const VERB_TONE = {
   POST:   { dot: 'bg-emerald-500', icon: 'bg-emerald-100' },
-  PUT:    { dot: 'bg-indigo-500',  icon: 'bg-indigo-100'  },
-  PATCH:  { dot: 'bg-indigo-500',  icon: 'bg-indigo-100'  },
-  DELETE: { dot: 'bg-rose-500',    icon: 'bg-rose-100'    },
+  PUT:    { dot: 'bg-indigo-50',  icon: 'bg-indigo-100'  },
+  PATCH:  { dot: 'bg-indigo-50',  icon: 'bg-indigo-100'  },
+  DELETE: { dot: 'bg-rose-50',    icon: 'bg-rose-100'    },
   GET:    { dot: 'bg-gray-400',    icon: 'bg-gray-100'    },
 };
 

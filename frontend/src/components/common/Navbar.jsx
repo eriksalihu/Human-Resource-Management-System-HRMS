@@ -13,7 +13,6 @@
 import { useState, useRef, useEffect, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
-import { ThemeContext } from '../../context/ThemeContext';
 import { NotificationContext } from '../../context/NotificationContext';
 
 /**
@@ -36,7 +35,6 @@ const formatBadge = (n) => {
  */
 const Navbar = ({ onToggleSidebar }) => {
   const auth = useContext(AuthContext);
-  const theme = useContext(ThemeContext);
   const notifications = useContext(NotificationContext);
 
   const navigate = useNavigate();
@@ -86,12 +84,6 @@ const Navbar = ({ onToggleSidebar }) => {
   const badge = formatBadge(unread);
   const recent = (notifications?.notifications || []).slice(0, 5);
 
-  /** Theme button — light vs dark. Falls back to a no-op if no provider. */
-  const isDark = theme?.isDark || false;
-  const handleToggleTheme = () => {
-    if (theme?.toggle) theme.toggle();
-  };
-
   /**
    * Logout via auth context, then redirect to login.
    *
@@ -116,7 +108,7 @@ const Navbar = ({ onToggleSidebar }) => {
     <nav
       className="no-print fixed top-0 left-0 right-0 z-30 h-16 border-b shadow-sm
         bg-white border-gray-200
-        dark:bg-gray-900 dark:border-gray-800"
+"
     >
       <div className="flex items-center justify-between h-full px-4">
         {/* Left: Hamburger + Logo */}
@@ -125,7 +117,7 @@ const Navbar = ({ onToggleSidebar }) => {
             onClick={onToggleSidebar}
             className="p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500
               text-gray-500 hover:text-gray-700 hover:bg-gray-100
-              dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-800"
+"
             aria-label="Toggle sidebar"
             aria-controls="app-sidebar"
             aria-haspopup="true"
@@ -146,7 +138,7 @@ const Navbar = ({ onToggleSidebar }) => {
           </button>
           <Link
             to="/dashboard"
-            className="text-xl font-semibold text-gray-800 dark:text-white"
+            className="text-xl font-semibold text-gray-800"
           >
             HRMS
           </Link>
@@ -156,7 +148,7 @@ const Navbar = ({ onToggleSidebar }) => {
         <div className="hidden md:flex flex-1 max-w-md mx-8">
           <div className="relative w-full">
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -174,58 +166,13 @@ const Navbar = ({ onToggleSidebar }) => {
               placeholder="Search…"
               className="w-full pl-10 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
                 bg-white border border-gray-300 text-gray-900 placeholder-gray-400
-                dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 dark:placeholder-gray-500"
+"
             />
           </div>
         </div>
 
-        {/* Right: Theme toggle + Notifications + Profile */}
+        {/* Right: Notifications + Profile */}
         <div className="flex items-center gap-2">
-          {/* Theme toggle */}
-          <button
-            type="button"
-            onClick={handleToggleTheme}
-            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-            className="p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500
-              text-gray-500 hover:text-gray-700 hover:bg-gray-100
-              dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
-          >
-            {isDark ? (
-              // Sun icon — clicking switches back to light
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-                />
-              </svg>
-            ) : (
-              // Moon icon
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-                />
-              </svg>
-            )}
-          </button>
-
           {/* Notification bell */}
           <div className="relative" ref={notifRef}>
             <button
@@ -235,7 +182,7 @@ const Navbar = ({ onToggleSidebar }) => {
               aria-expanded={notifOpen}
               className="relative p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500
                 text-gray-500 hover:text-gray-700 hover:bg-gray-100
-                dark:text-gray-300 dark:hover:text-white dark:hover:bg-gray-800"
+"
             >
               <svg
                 className="w-6 h-6"
@@ -253,7 +200,7 @@ const Navbar = ({ onToggleSidebar }) => {
               </svg>
               {badge && (
                 <span
-                  className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold text-white bg-rose-500 ring-2 ring-white dark:ring-gray-900"
+                  className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold text-white bg-red-500 ring-2 ring-white"
                   aria-hidden="true"
                 >
                   {badge}
@@ -267,28 +214,28 @@ const Navbar = ({ onToggleSidebar }) => {
                 aria-label="Notifications"
                 className="absolute right-0 mt-2 w-80 max-h-96 overflow-auto rounded-lg shadow-lg py-1 z-50
                   bg-white border border-gray-200
-                  dark:bg-gray-800 dark:border-gray-700"
+"
               >
-                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-700">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+                  <p className="text-sm font-semibold text-gray-900">
                     Notifications
                   </p>
                   {unread > 0 && notifications?.markAllAsRead && (
                     <button
                       type="button"
                       onClick={() => notifications.markAllAsRead()}
-                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200"
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
                     >
                       Mark all read
                     </button>
                   )}
                 </div>
                 {recent.length === 0 ? (
-                  <p className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                  <p className="px-4 py-6 text-center text-sm text-gray-500">
                     No notifications yet.
                   </p>
                 ) : (
-                  <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                  <ul className="divide-y divide-gray-100">
                     {recent.map((n) => (
                       <li key={n.id}>
                         <Link
@@ -299,26 +246,26 @@ const Navbar = ({ onToggleSidebar }) => {
                               notifications.markAsRead(n.id);
                             }
                           }}
-                          className={`block px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
-                            !n.is_read ? 'bg-indigo-50/40 dark:bg-indigo-500/10' : ''
+                          className={`block px-3 py-2 hover:bg-gray-50 ${
+                            !n.is_read ? 'bg-indigo-50/40' : ''
                           }`}
                         >
                           <div className="flex items-start gap-2">
                             {!n.is_read && (
-                              <span className="mt-1.5 inline-block h-2 w-2 rounded-full bg-indigo-500 shrink-0" />
+                              <span className="mt-1.5 inline-block h-2 w-2 rounded-full bg-indigo-50 shrink-0" />
                             )}
                             <div className="min-w-0 flex-1">
                               <p
                                 className={`text-sm truncate ${
                                   n.is_read
-                                    ? 'text-gray-700 dark:text-gray-300'
-                                    : 'text-gray-900 dark:text-white font-medium'
+                                    ? 'text-gray-700'
+                                    : 'text-gray-900 font-medium'
                                 }`}
                               >
                                 {n.title}
                               </p>
                               {n.message && (
-                                <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+                                <p className="text-xs text-gray-500 line-clamp-2">
                                   {n.message}
                                 </p>
                               )}
@@ -332,9 +279,9 @@ const Navbar = ({ onToggleSidebar }) => {
                 <Link
                   to="/notifications"
                   onClick={() => setNotifOpen(false)}
-                  className="block px-3 py-2 text-center text-xs font-medium border-t border-gray-100 dark:border-gray-700
+                  className="block px-3 py-2 text-center text-xs font-medium border-t border-gray-100
                     text-indigo-600 hover:bg-gray-50
-                    dark:text-indigo-300 dark:hover:bg-gray-700/50"
+"
                 >
                   See all notifications →
                 </Link>
@@ -350,9 +297,9 @@ const Navbar = ({ onToggleSidebar }) => {
               aria-expanded={profileOpen}
               className="flex items-center gap-2 p-1.5 rounded-lg transition-colors
                 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500
-                dark:hover:bg-gray-800"
+"
             >
-              <div className="w-8 h-8 rounded-full bg-indigo-500 dark:bg-indigo-600 flex items-center justify-center text-white text-sm font-medium overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm font-medium overflow-hidden">
                 {user?.profile_image ? (
                   <img
                     src={user.profile_image}
@@ -363,13 +310,13 @@ const Navbar = ({ onToggleSidebar }) => {
                   initials
                 )}
               </div>
-              <span className="text-sm text-gray-700 dark:text-gray-200 hidden md:block max-w-[10rem] truncate">
+              <span className="text-sm text-gray-700 hidden md:block max-w-[10rem] truncate">
                 {fullName || 'Guest'}
               </span>
               <svg
                 className={`w-4 h-4 transition-transform ${
                   profileOpen ? 'rotate-180' : ''
-                } text-gray-500 dark:text-gray-400`}
+                } text-gray-500`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -390,14 +337,14 @@ const Navbar = ({ onToggleSidebar }) => {
                 aria-label="User menu"
                 className="absolute right-0 mt-2 w-56 rounded-lg shadow-lg py-1 z-50
                   bg-white border border-gray-200
-                  dark:bg-gray-800 dark:border-gray-700"
+"
               >
                 {user && (
-                  <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                  <div className="px-3 py-2 border-b border-gray-100">
+                    <p className="text-sm font-semibold text-gray-900 truncate">
                       {fullName}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    <p className="text-xs text-gray-500 truncate">
                       {user.email}
                     </p>
                   </div>
@@ -407,7 +354,7 @@ const Navbar = ({ onToggleSidebar }) => {
                   onClick={() => setProfileOpen(false)}
                   className="flex items-center gap-2 px-4 py-2 text-sm
                     text-gray-700 hover:bg-gray-50
-                    dark:text-gray-200 dark:hover:bg-gray-700/50"
+"
                 >
                   <svg
                     className="w-4 h-4"
@@ -430,7 +377,7 @@ const Navbar = ({ onToggleSidebar }) => {
                   onClick={() => setProfileOpen(false)}
                   className="flex items-center gap-2 px-4 py-2 text-sm
                     text-gray-700 hover:bg-gray-50
-                    dark:text-gray-200 dark:hover:bg-gray-700/50"
+"
                 >
                   <svg
                     className="w-4 h-4"
@@ -454,13 +401,13 @@ const Navbar = ({ onToggleSidebar }) => {
                   </svg>
                   Settings
                 </Link>
-                <hr className="my-1 border-gray-200 dark:border-gray-700" />
+                <hr className="my-1 border-gray-200" />
                 <button
                   type="button"
                   onClick={handleLogout}
                   className="flex items-center gap-2 w-full px-4 py-2 text-sm
                     text-red-600 hover:bg-red-50
-                    dark:text-rose-300 dark:hover:bg-rose-500/10"
+"
                 >
                   <svg
                     className="w-4 h-4"

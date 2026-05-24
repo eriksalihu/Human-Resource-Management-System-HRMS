@@ -24,7 +24,7 @@ const buildPeriodOptions = () => {
   const quarter = Math.floor(now.getMonth() / 3) + 1;
   const periods = [];
 
-  // Quarters back from current
+  // Quarters back from current — values match the DB format "Q1 2026"
   for (let i = 0; i < 8; i += 1) {
     let q = quarter - i;
     let y = year;
@@ -32,13 +32,9 @@ const buildPeriodOptions = () => {
       q += 4;
       y -= 1;
     }
-    const label = `${y}-Q${q}`;
+    const label = `Q${q} ${y}`;
     periods.push({ value: label, label });
   }
-
-  // Annual labels for completeness
-  periods.push({ value: String(year), label: String(year) });
-  periods.push({ value: String(year - 1), label: String(year - 1) });
 
   return periods;
 };
@@ -165,8 +161,8 @@ const ReviewList = ({
     const load = async () => {
       try {
         const [empResult, deptResult] = await Promise.all([
-          employeeApi.getAll({ limit: 200, statusi: 'active' }),
-          departmentApi.getAll({ limit: 200 }),
+          employeeApi.getAll({ limit: 100, statusi: 'active' }),
+          departmentApi.getAll({ limit: 100 }),
         ]);
         if (!cancelled) {
           setEmployees(empResult.data || []);

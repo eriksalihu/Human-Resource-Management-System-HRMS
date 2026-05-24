@@ -14,6 +14,7 @@ import Modal from '../components/common/Modal';
 import { SkeletonTable } from '../components/common/SkeletonLoader';
 import { useToast } from '../components/common/Toast';
 import useAuth from '../hooks/useAuth';
+import useNotifications from '../hooks/useNotifications';
 
 /** Roles that can create / edit / delete trainings and bulk-enroll others. */
 const HR_ROLES = ['Admin', 'HR Manager'];
@@ -96,6 +97,7 @@ const TrainingsPage = () => {
   // Force-refresh keys
   const [listRefreshKey, setListRefreshKey] = useState(0);
   const [detailRefreshKey, setDetailRefreshKey] = useState(0);
+  const [mineRefreshKey, setMineRefreshKey] = useState(0);
   const refreshList = useCallback(
     () => setListRefreshKey((k) => k + 1),
     []
@@ -104,12 +106,18 @@ const TrainingsPage = () => {
     () => setDetailRefreshKey((k) => k + 1),
     []
   );
+  const refreshMine = useCallback(
+    () => setMineRefreshKey((k) => k + 1),
+    []
+  );
   const refreshAll = useCallback(() => {
     refreshList();
     refreshDetail();
-  }, [refreshList, refreshDetail]);
+    refreshMine();
+  }, [refreshList, refreshDetail, refreshMine]);
 
   const { addToast } = useToast();
+  const { refresh: refreshNotifications } = useNotifications();
 
   /** Switch tabs, marking the new one visited so its child mounts. */
   const handleTabChange = (tabId) => {
@@ -175,6 +183,7 @@ const TrainingsPage = () => {
   const handleView = (row) => {
     setSelectedTraining(row);
     setView(VIEW.DETAIL);
+    handleTabChange(TABS.CATALOG);
   };
 
   /** Return from detail view to the catalog list. */
@@ -238,6 +247,8 @@ const TrainingsPage = () => {
       }
 
       addToast('Participant enrolled', 'success');
+      // Await the badge refresh before refreshDetail triggers a key change.
+      await refreshNotifications({ silent: true });
       setParticipantModalOpen(false);
       refreshDetail();
       refreshList();
@@ -254,7 +265,7 @@ const TrainingsPage = () => {
     <div className="p-6 space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">Trainings</h1>
+        <h1 className="text-2xl font-bold text-gray-900 truncate">Trainings</h1>
         <p className="text-sm text-gray-500">
           {isHR
             ? 'Manage the training catalog, rosters, and post-completion ratings'
@@ -296,6 +307,7 @@ const TrainingsPage = () => {
               onEdit={isHR ? handleEdit : undefined}
               onView={handleView}
               showAddButton={isHR}
+              onEnrollmentChange={refreshMine}
             />
           )}
 
@@ -344,7 +356,7 @@ const TrainingsPage = () => {
       {/* My Trainings tab */}
       {visitedTabs.has(TABS.MINE) && (
         <div hidden={activeTab !== TABS.MINE}>
-          <MyTrainingsPanel key={`mine-${listRefreshKey}`} onView={handleView} />
+          <MyTrainingsPanel key={`mine-${mineRefreshKey}`} onView={handleView} />
         </div>
       )}
 

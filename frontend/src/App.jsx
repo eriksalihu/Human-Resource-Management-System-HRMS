@@ -36,7 +36,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { ThemeProvider } from './context/ThemeContext';
 import { NotificationProvider } from './context/NotificationContext';
 import AuthLayout from './layouts/AuthLayout';
 import MainLayout from './layouts/MainLayout';
@@ -44,6 +43,7 @@ import ProtectedRoute from './components/common/ProtectedRoute';
 import LoadingSpinner from './components/common/LoadingSpinner';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import RateLimitNotice from './components/common/RateLimitNotice';
+import { ToastProvider } from './components/common/Toast';
 
 /**
  * Public auth pages — kept eager so the login screen paints without a
@@ -166,7 +166,7 @@ function App() {
   return (
     <ErrorBoundary name="app-root">
       <BrowserRouter>
-        <ThemeProvider>
+        <ToastProvider position="top-right">
           <AuthProvider>
             <NotificationProvider>
               {/* Always-mounted global 429 banner — registers itself
@@ -200,7 +200,7 @@ function App() {
                     path="/forgot-password"
                     element={
                       <LazyRoute name="forgot-password">
-                        <div className="bg-white dark:bg-gray-900 shadow-md rounded-xl p-8 border border-gray-200 dark:border-gray-800">
+                        <div className="bg-white shadow-md rounded-xl p-8 border border-gray-200">
                           <ForgotPassword />
                         </div>
                       </LazyRoute>
@@ -210,7 +210,7 @@ function App() {
                     path="/reset-password"
                     element={
                       <LazyRoute name="reset-password">
-                        <div className="bg-white dark:bg-gray-900 shadow-md rounded-xl p-8 border border-gray-200 dark:border-gray-800">
+                        <div className="bg-white shadow-md rounded-xl p-8 border border-gray-200">
                           <ResetPassword />
                         </div>
                       </LazyRoute>
@@ -245,25 +245,31 @@ function App() {
                   <Route
                     path="/departments"
                     element={
-                      <LazyRoute name="departments">
-                        <DepartmentsPage />
-                      </LazyRoute>
+                      <ProtectedRoute requiredRoles={['Admin', 'HR Manager']}>
+                        <LazyRoute name="departments">
+                          <DepartmentsPage />
+                        </LazyRoute>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/employees"
                     element={
-                      <LazyRoute name="employees">
-                        <EmployeesPage />
-                      </LazyRoute>
+                      <ProtectedRoute requiredRoles={['Admin', 'HR Manager', 'Department Manager']}>
+                        <LazyRoute name="employees">
+                          <EmployeesPage />
+                        </LazyRoute>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/positions"
                     element={
-                      <LazyRoute name="positions">
-                        <PositionsPage />
-                      </LazyRoute>
+                      <ProtectedRoute requiredRoles={['Admin', 'HR Manager']}>
+                        <LazyRoute name="positions">
+                          <PositionsPage />
+                        </LazyRoute>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
@@ -293,9 +299,11 @@ function App() {
                   <Route
                     path="/salaries"
                     element={
-                      <LazyRoute name="salaries">
-                        <SalariesPage />
-                      </LazyRoute>
+                      <ProtectedRoute requiredRoles={['Admin', 'HR Manager']}>
+                        <LazyRoute name="salaries">
+                          <SalariesPage />
+                        </LazyRoute>
+                      </ProtectedRoute>
                     }
                   />
                   <Route
@@ -358,7 +366,7 @@ function App() {
               </Routes>
             </NotificationProvider>
           </AuthProvider>
-        </ThemeProvider>
+        </ToastProvider>
       </BrowserRouter>
     </ErrorBoundary>
   );

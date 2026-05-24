@@ -118,6 +118,9 @@ const ExpiryBadge = ({ value }) => {
  * @param {Function} [props.onDelete] - Custom delete handler (defaults to API)
  * @param {Object}   [props.defaultFilters]
  * @param {boolean}  [props.showUploadButton=true]
+ * @param {boolean}  [props.selfOnly=false] - When true, fetches only the
+ *   authenticated user's own documents via `/me` instead of the full
+ *   listing endpoint (which requires manager/admin roles).
  * @returns {JSX.Element}
  */
 const DocumentList = ({
@@ -127,6 +130,7 @@ const DocumentList = ({
   onDelete,
   defaultFilters = {},
   showUploadButton = true,
+  selfOnly = false,
 }) => {
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({});
@@ -151,13 +155,15 @@ const DocumentList = ({
 
   const { addToast } = useToast();
 
-  /** Load active employees once for the filter dropdown. */
+  /** Load active employees once for the filter dropdown.
+   *  Skipped in selfOnly mode — employee can only see their own docs. */
   useEffect(() => {
+    if (selfOnly) return;
     let cancelled = false;
     const load = async () => {
       try {
         const result = await employeeApi.getAll({
-          limit: 200,
+          limit: 100,
           statusi: 'active',
         });
         if (!cancelled) setEmployees(result.data || []);
@@ -169,23 +175,44 @@ const DocumentList = ({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selfOnly]);
 
-  /** Fetch documents with the current filter / sort / paging state. */
+  /** Fetch documents with the current filter / sort / paging state.
+   *
+   *  In `selfOnly` mode the restricted `/documents` endpoint is replaced
+   *  by `/documents/me`. Filters are applied client-side. */
   const fetchRows = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await documentApi.getAll({
-        page,
-        limit,
-        employee_id: employeeId || undefined,
-        lloji: lloji || undefined,
-        search: search || undefined,
-        sortBy,
-        sortOrder,
-      });
-      setRows(result.data);
-      setPagination(result.pagination);
+      if (selfOnly) {
+        const result = await documentApi.getMyDocuments();
+        let data = result?.documents || [];
+        // Client-side type filter
+        if (lloji) data = data.filter((r) => r.lloji === lloji);
+        // Client-side search
+        if (search) {
+          const q = search.toLowerCase();
+          data = data.filter(
+            (r) =>
+              (r.titulli || '').toLowerCase().includes(q) ||
+              (r.pershkrimi || '').toLowerCase().includes(q)
+          );
+        }
+        setRows(data);
+        setPagination({});
+      } else {
+        const result = await documentApi.getAll({
+          page,
+          limit,
+          employee_id: employeeId || undefined,
+          lloji: lloji || undefined,
+          search: search || undefined,
+          sortBy,
+          sortOrder,
+        });
+        setRows(result.data);
+        setPagination(result.pagination);
+      }
     } catch (err) {
       addToast(
         err.response?.data?.message || 'Failed to load documents',
@@ -194,7 +221,7 @@ const DocumentList = ({
     } finally {
       setLoading(false);
     }
-  }, [page, limit, employeeId, lloji, search, sortBy, sortOrder, addToast]);
+  }, [selfOnly, page, limit, employeeId, lloji, search, sortBy, sortOrder, addToast]);
 
   useEffect(() => {
     fetchRows();
@@ -371,15 +398,17 @@ const DocumentList = ({
                 Edit
               </button>
             )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setDeleteTarget(row);
-              }}
-              className="text-red-600 hover:text-red-900 text-sm font-medium"
-            >
-              Delete
-            </button>
+            {onEdit && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteTarget(row);
+                }}
+                className="text-red-600 hover:text-red-900 text-sm font-medium"
+              >
+                Delete
+              </button>
+            )}
           </div>
         ),
       },
@@ -443,13 +472,15 @@ const DocumentList = ({
             className="block w-full rounded-md border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500"
           />
         </div>
-        <FilterDropdown
-          label="Employee"
-          options={employeeOptions}
-          value={employeeId}
-          onChange={bumpPage(setEmployeeId)}
-          allLabel="All employees"
-        />
+        {!selfOnly && (
+          <FilterDropdown
+            label="Employee"
+            options={employeeOptions}
+            value={employeeId}
+            onChange={bumpPage(setEmployeeId)}
+            allLabel="All employees"
+          />
+        )}
         <FilterDropdown
           label="Type"
           options={TYPE_OPTIONS}

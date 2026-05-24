@@ -171,7 +171,7 @@ const EmployeeForm = ({ initialData, onSubmit, onCancel, submitting = false }) =
     const loadUsers = async () => {
       try {
         const { data } = await axiosInstance.get('/users', {
-          params: { limit: 200 },
+          params: { limit: 100 },
         });
         setUsers(data.data || []);
       } catch {
@@ -247,7 +247,7 @@ const EmployeeForm = ({ initialData, onSubmit, onCancel, submitting = false }) =
         const result = await employeeApi.getAll({
           department_id: deptId,
           statusi: 'active',
-          limit: 200,
+          limit: 100,
         });
         const filtered = (result.data || []).filter(
           (m) => !isEdit || Number(m.id) !== Number(initialData?.id)
@@ -623,7 +623,7 @@ const EmployeeForm = ({ initialData, onSubmit, onCancel, submitting = false }) =
     );
 
     return (
-      <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
           Review the details before creating
         </p>

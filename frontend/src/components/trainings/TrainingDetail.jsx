@@ -10,10 +10,14 @@ import LoadingSpinner from '../common/LoadingSpinner';
 import ConfirmDialog from '../common/ConfirmDialog';
 import { useToast } from '../common/Toast';
 import useAuth from '../../hooks/useAuth';
+import useNotifications from '../../hooks/useNotifications';
 import TextareaWithCounter from '../common/TextareaWithCounter';
 
 /** Roles allowed to manage training rosters (status changes, edit, delete). */
 const HR_ROLES = ['Admin', 'HR Manager'];
+
+/** Roles that can view the full participant roster. */
+const MANAGER_ROLES = ['Admin', 'HR Manager', 'Department Manager'];
 
 /** Tailwind classes per training status. */
 const STATUS_BADGE_CLASS = {
@@ -48,7 +52,7 @@ const CapacityBar = ({ enrolled, capacity }) => {
   const pct = Math.round(ratio * 100);
 
   let tone = 'bg-emerald-500';
-  if (ratio >= 1) tone = 'bg-red-500';
+  if (ratio >= 1) tone = 'bg-red-50';
   else if (ratio >= 0.8) tone = 'bg-amber-500';
 
   return (
@@ -178,6 +182,7 @@ const TrainingDetail = ({
 }) => {
   const { user } = useAuth() || {};
   const isHR = (user?.roles || []).some((r) => HR_ROLES.includes(r));
+  const isManager = (user?.roles || []).some((r) => MANAGER_ROLES.includes(r));
 
   const [training, setTraining] = useState(providedTraining || null);
   const [participants, setParticipants] = useState([]);
@@ -199,6 +204,7 @@ const TrainingDetail = ({
   const [withdrawing, setWithdrawing] = useState(false);
 
   const { addToast } = useToast();
+  const { refresh: refreshNotifications } = useNotifications();
 
   /**
    * Resolve the caller's own participant row (if any) so we can show the
@@ -257,18 +263,30 @@ const TrainingDetail = ({
     if (!trainingId_) return;
     setLoadingRoster(true);
     try {
-      const list = await trainingApi.getParticipants(trainingId_);
-      setParticipants(Array.isArray(list) ? list : []);
+      if (isManager) {
+        // Managers / HR see the full roster
+        const list = await trainingApi.getParticipants(trainingId_);
+        setParticipants(Array.isArray(list) ? list : []);
+      } else {
+        // Employees: fetch only own enrollment via /my endpoint
+        const myTrainings = await trainingApi.getMyTrainings();
+        const myRow = (Array.isArray(myTrainings) ? myTrainings : []).filter(
+          (t) => t.training_id === trainingId_
+        );
+        setParticipants(myRow);
+      }
     } catch (err) {
-      addToast(
-        err.response?.data?.message || 'Failed to load participants',
-        'error'
-      );
+      if (isManager) {
+        addToast(
+          err.response?.data?.message || 'Failed to load participants',
+          'error'
+        );
+      }
       setParticipants([]);
     } finally {
       setLoadingRoster(false);
     }
-  }, [trainingId_, addToast]);
+  }, [trainingId_, isManager, addToast]);
 
   useEffect(() => {
     loadRoster();
@@ -281,8 +299,12 @@ const TrainingDetail = ({
     try {
       await trainingApi.enroll(trainingId_);
       addToast(`Enrolled in "${training?.titulli || 'training'}"`, 'success');
+      // Refresh notification badge BEFORE onChanged — onChanged triggers a
+      // key change in the parent which unmounts this component, so the
+      // refresh must complete while we're still mounted.
+      await refreshNotifications({ silent: true });
       onChanged?.();
-      await loadRoster();
+      loadRoster();
     } catch (err) {
       addToast(
         err.response?.data?.message || 'Failed to enroll in training',
@@ -395,6 +417,7 @@ const TrainingDetail = ({
   const total = Number(training.kapaciteti) || 0;
   const isFull = total > 0 && taken >= total;
   const isUpcoming = training.statusi === 'upcoming';
+  const isOngoing = training.statusi === 'ongoing';
   const isCompleted = training.statusi === 'completed';
   const statusBadge =
     STATUS_BADGE_CLASS[training.statusi] || STATUS_BADGE_CLASS.completed;
@@ -485,7 +508,7 @@ const TrainingDetail = ({
             <CapacityBar enrolled={taken} capacity={total} />
             {/* Self-action button */}
             <div className="mt-3">
-              {!myParticipantRow && isUpcoming && !isFull && (
+              {!myParticipantRow && (isUpcoming || isOngoing) && !isFull && (
                 <button
                   type="button"
                   onClick={handleEnrollSelf}
@@ -495,14 +518,14 @@ const TrainingDetail = ({
                   {selfBusy ? 'Enrolling…' : 'Enroll me'}
                 </button>
               )}
-              {!myParticipantRow && isUpcoming && isFull && (
+              {!myParticipantRow && (isUpcoming || isOngoing) && isFull && (
                 <p className="text-xs text-amber-700 bg-amber-50 ring-1 ring-amber-200 rounded-md px-2 py-1.5 text-center">
                   Training is full
                 </p>
               )}
               {myParticipantRow &&
                 myParticipantRow.statusi === 'enrolled' &&
-                isUpcoming && (
+                (isUpcoming || isOngoing) && (
                   <button
                     type="button"
                     onClick={() => setWithdrawTarget(myParticipantRow)}
@@ -551,8 +574,8 @@ const TrainingDetail = ({
         )}
       </div>
 
-      {/* Roster */}
-      <div className="rounded-lg border border-gray-200 bg-white">
+      {/* Roster (managers / HR only) */}
+      {isManager && <div className="rounded-lg border border-gray-200 bg-white">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-900">
             Participants{' '}
@@ -636,7 +659,7 @@ const TrainingDetail = ({
                         </button>
                       </>
                     )}
-                    {isHR && p.statusi === 'enrolled' && isUpcoming && (
+                    {isHR && p.statusi === 'enrolled' && (isUpcoming || isOngoing) && (
                       <button
                         type="button"
                         onClick={() => setWithdrawTarget(p)}
@@ -652,7 +675,7 @@ const TrainingDetail = ({
             })}
           </ul>
         )}
-      </div>
+      </div>}
 
       {/* Rating modal — inline panel rather than nested ConfirmDialog so the
           textarea isn't trapped inside a <p> tag. */}

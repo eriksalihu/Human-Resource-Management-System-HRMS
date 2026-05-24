@@ -54,6 +54,19 @@ router.get(
 );
 
 /**
+ * @route   GET /api/employees/search
+ * @desc    Advanced search with multi-value status/contract filters and date range
+ * @access  Private (Admin, HR Manager, Department Manager)
+ *
+ * NOTE: Must be registered BEFORE /:id so "search" isn't parsed as an ID.
+ */
+router.get(
+  '/search',
+  authorize(['Admin', 'HR Manager', 'Department Manager']),
+  employeeController.advancedSearch
+);
+
+/**
  * @route   GET /api/employees
  * @desc    List employees with pagination, search, and filters
  * @access  Private (Admin, HR Manager, Department Manager)

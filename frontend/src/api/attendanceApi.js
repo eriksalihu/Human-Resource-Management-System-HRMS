@@ -83,7 +83,7 @@ export const getByEmployee = async (employeeId, params = {}) => {
   const { data } = await axiosInstance.get('/attendances', {
     params: cleanParams({
       employee_id: employeeId,
-      limit: 200,
+      limit: 100,
       ...params,
     }),
   });

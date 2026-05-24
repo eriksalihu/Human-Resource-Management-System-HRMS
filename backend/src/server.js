@@ -8,7 +8,7 @@ require('dotenv').config();
 const app = require('./app');
 const { testConnection, warmupPool } = require('./config/db');
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 /**
  * Start the server (commit 282 — startup perf).

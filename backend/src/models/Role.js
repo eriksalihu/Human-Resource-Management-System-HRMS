@@ -109,4 +109,24 @@ const getUserRoles = async (userId) => {
   return rows;
 };
 
-module.exports = { findAll, findById, findByName, create, assignToUser, removeFromUser, getUserRoles };
+/**
+ * Get all user IDs that belong to ANY of the given role names.
+ * Useful for broadcasting a notification to every Admin / HR Manager, etc.
+ *
+ * @param {string[]} roleNames - e.g. ['Admin', 'HR Manager']
+ * @returns {Promise<number[]>} Distinct user IDs
+ */
+const getUserIdsByRoleNames = async (roleNames = []) => {
+  if (!roleNames.length) return [];
+  const placeholders = roleNames.map(() => '?').join(', ');
+  const [rows] = await db.query(
+    `SELECT DISTINCT ur.user_id
+     FROM UserRoles ur
+     INNER JOIN Roles r ON ur.role_id = r.id
+     WHERE r.name IN (${placeholders})`,
+    roleNames
+  );
+  return rows.map((r) => r.user_id);
+};
+
+module.exports = { findAll, findById, findByName, create, assignToUser, removeFromUser, getUserRoles, getUserIdsByRoleNames };

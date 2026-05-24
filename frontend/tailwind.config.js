@@ -15,12 +15,8 @@ export default {
   ],
 
   /**
-   * Use the class strategy so the `dark` class on <html> (toggled by
-   * `ThemeContext`) drives `dark:` variants. Without this, Tailwind
-   * defaults to `'media'` (system preference) and the toggle button is
-   * effectively a no-op.
+   * Dark mode disabled — the app uses a light-only design.
    */
-  darkMode: 'class',
 
   theme: {
     extend: {
@@ -114,7 +110,7 @@ export default {
         'fade-in':         'fadeIn 200ms ease-out both',
         'slide-in-right':  'slideInRight 250ms ease-out both',
         'slide-in-left':   'slideInLeft 250ms ease-out both',
-        'slide-in-down':   'slideInDown 200ms ease-out both',
+        'slide-in-down':   'slideInDown 200ms ease-out backwards',
         'slide-up':        'slideUp 220ms ease-out both',
         shake:             'shake 450ms ease-in-out',
       },

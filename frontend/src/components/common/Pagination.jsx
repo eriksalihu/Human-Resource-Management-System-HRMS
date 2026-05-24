@@ -160,18 +160,28 @@ const Pagination = ({
         {handlePerPage && (
           <label className="text-sm text-gray-600">
             <span className="sr-only">Results per page</span>
-            <select
-              value={pageSize}
-              onChange={(e) => handlePerPage(Number(e.target.value))}
-              aria-label="Results per page"
-              className="text-sm border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            >
-              {[5, 10, 25, 50].map((n) => (
-                <option key={n} value={n}>
-                  {n} / page
-                </option>
-              ))}
-            </select>
+            <div className="relative inline-block">
+              <select
+                value={pageSize}
+                onChange={(e) => handlePerPage(Number(e.target.value))}
+                aria-label="Results per page"
+                className="appearance-none text-sm border border-gray-300 rounded-md pl-3 pr-8 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer"
+              >
+                {[5, 10, 25, 50].map((n) => (
+                  <option key={n} value={n}>
+                    {n} / page
+                  </option>
+                ))}
+              </select>
+              <svg
+                className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </label>
         )}
 
@@ -252,7 +262,7 @@ const Pagination = ({
               }}
               placeholder={String(currentPage)}
               aria-label={`Go to page, between 1 and ${totalPages}`}
-              className="w-16 text-sm border border-gray-300 rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-16 text-sm border border-gray-300 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
             <button
               type="button"

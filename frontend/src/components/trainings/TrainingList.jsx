@@ -10,6 +10,7 @@ import DataTable from '../common/DataTable';
 import Pagination from '../common/Pagination';
 import ConfirmDialog from '../common/ConfirmDialog';
 import { useToast } from '../common/Toast';
+import useNotifications from '../../hooks/useNotifications';
 
 /** Status filter tabs (values must match Trainings.statusi ENUM). */
 const STATUS_TABS = [
@@ -46,7 +47,7 @@ const CapacityBar = ({ enrolled = 0, capacity = 0 }) => {
   const pct = Math.round(ratio * 100);
 
   let tone = 'bg-emerald-500';
-  if (ratio >= 1) tone = 'bg-red-500';
+  if (ratio >= 1) tone = 'bg-red-50';
   else if (ratio >= 0.8) tone = 'bg-amber-500';
 
   return (
@@ -85,6 +86,7 @@ const TrainingList = ({
   onView,
   onEnroll,
   onDelete,
+  onEnrollmentChange,
   defaultFilters = {},
   showAddButton = true,
 }) => {
@@ -105,8 +107,10 @@ const TrainingList = ({
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [enrollingId, setEnrollingId] = useState(null);
+  const [enrolledTrainingIds, setEnrolledTrainingIds] = useState(new Set());
 
   const { addToast } = useToast();
+  const { refresh: refreshNotifications } = useNotifications();
 
   /** Fetch trainings with the current filter / sort / paging state. */
   const fetchRows = useCallback(async () => {
@@ -137,6 +141,25 @@ const TrainingList = ({
   useEffect(() => {
     fetchRows();
   }, [fetchRows]);
+
+  /** Fetch the caller's enrolled training IDs for enrollment status display. */
+  const loadMyEnrollments = useCallback(async () => {
+    try {
+      const result = await trainingApi.getMyTrainings();
+      const ids = new Set(
+        (Array.isArray(result) ? result : [])
+          .filter((t) => t.statusi === 'enrolled')
+          .map((t) => t.training_id)
+      );
+      setEnrolledTrainingIds(ids);
+    } catch {
+      // Soft fail — enrollment indicators are a visual nicety
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMyEnrollments();
+  }, [loadMyEnrollments]);
 
   /** Column sort toggle. */
   const handleSort = (column) => {
@@ -200,10 +223,37 @@ const TrainingList = ({
     try {
       await trainingApi.enroll(row.id);
       addToast(`Enrolled in "${row.titulli}"`, 'success');
+      // Refresh notification badge — backend creates a notification on enroll.
+      await refreshNotifications({ silent: true });
       fetchRows();
+      loadMyEnrollments();
+      onEnrollmentChange?.();
     } catch (err) {
       const msg =
         err.response?.data?.message || 'Failed to enroll in training';
+      addToast(msg, 'error');
+    } finally {
+      setEnrollingId(null);
+    }
+  };
+
+  /**
+   * Quick withdrawal from the catalog list. Withdraws the caller's own
+   * enrollment and refreshes enrollment indicators.
+   */
+  const handleQuickWithdraw = async (row) => {
+    setEnrollingId(row.id);
+    try {
+      await trainingApi.withdraw(row.id);
+      addToast(`Withdrew from "${row.titulli}"`, 'info');
+      // Refresh notification badge — backend may create a notification on withdraw.
+      await refreshNotifications({ silent: true });
+      fetchRows();
+      loadMyEnrollments();
+      onEnrollmentChange?.();
+    } catch (err) {
+      const msg =
+        err.response?.data?.message || 'Failed to withdraw from training';
       addToast(msg, 'error');
     } finally {
       setEnrollingId(null);
@@ -282,10 +332,15 @@ const TrainingList = ({
         label: 'Actions',
         sortable: false,
         render: (_v, row) => {
+          const isEnrolled = enrolledTrainingIds.has(row.id);
           const canEnroll =
-            row.statusi === 'upcoming' &&
+            !isEnrolled &&
+            (row.statusi === 'upcoming' || row.statusi === 'ongoing') &&
             (!row.kapaciteti ||
               Number(row.participant_count) < Number(row.kapaciteti));
+          const canWithdraw =
+            isEnrolled &&
+            (row.statusi === 'upcoming' || row.statusi === 'ongoing');
           return (
             <div className="flex items-center gap-3">
               {onView && (
@@ -299,7 +354,7 @@ const TrainingList = ({
                   View
                 </button>
               )}
-              {canEnroll && (onEnroll || true) && (
+              {canEnroll && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -310,6 +365,23 @@ const TrainingList = ({
                 >
                   {enrollingId === row.id ? '…' : 'Enroll'}
                 </button>
+              )}
+              {canWithdraw && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleQuickWithdraw(row);
+                  }}
+                  disabled={enrollingId === row.id}
+                  className="text-amber-600 hover:text-amber-800 text-sm font-medium disabled:opacity-50"
+                >
+                  {enrollingId === row.id ? '…' : 'Withdraw'}
+                </button>
+              )}
+              {isEnrolled && !canWithdraw && (
+                <span className="text-emerald-600 text-sm font-medium">
+                  Enrolled
+                </span>
               )}
               {onEdit && (
                 <button
@@ -322,7 +394,7 @@ const TrainingList = ({
                   Edit
                 </button>
               )}
-              {(onDelete !== undefined || onDelete === undefined) && (
+              {onEdit && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -338,7 +410,7 @@ const TrainingList = ({
         },
       },
     ],
-    [onView, onEdit, onEnroll, onDelete, enrollingId]
+    [onView, onEdit, onEnroll, onDelete, enrollingId, enrolledTrainingIds]
   );
 
   const hasActiveFilters = Boolean(statusi || fromDate || toDate || search);

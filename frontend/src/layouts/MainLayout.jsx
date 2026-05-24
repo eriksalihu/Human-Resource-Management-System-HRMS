@@ -79,7 +79,7 @@ const MainLayout = () => {
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900">
       {/* Skip-to-content link (a11y) — visually hidden until focused, so
           keyboard / screen-reader users can jump past the navbar +
           sidebar straight to the page content. Targets the

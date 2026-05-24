@@ -33,6 +33,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import useAuth from '../../hooks/useAuth';
 
 /** Distance in px the finger must travel left to count as a close-swipe. */
 const SWIPE_CLOSE_THRESHOLD_PX = 60;
@@ -45,63 +46,78 @@ const LG_BREAKPOINT_PX = 1024;
 
 /**
  * Navigation items for the sidebar menu.
- * Each item has a label, path, and SVG icon path.
+ *
+ * Each item has a label, path, SVG icon path, and an optional `roles`
+ * array. When `roles` is present the link is only rendered for users
+ * who hold at least one of the listed roles. Items without `roles` are
+ * visible to every authenticated user.
  */
 const navItems = [
   {
     label: 'Dashboard',
     path: '/dashboard',
     icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
+    // visible to all roles
   },
   {
     label: 'Departments',
     path: '/departments',
     icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
+    roles: ['Admin', 'HR Manager'],
   },
   {
     label: 'Positions',
     path: '/positions',
     icon: 'M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+    roles: ['Admin', 'HR Manager'],
   },
   {
     label: 'Employees',
     path: '/employees',
     icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
+    roles: ['Admin', 'HR Manager', 'Department Manager'],
   },
   {
     label: 'Salaries',
     path: '/salaries',
     icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+    roles: ['Admin', 'HR Manager'],
   },
   {
     label: 'Leave Requests',
     path: '/leave-requests',
     icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+    // visible to all roles
   },
   {
     label: 'Attendance',
     path: '/attendance',
     icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+    // visible to all roles
   },
   {
     label: 'Performance',
     path: '/performance',
     icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+    // visible to all roles
   },
   {
     label: 'Trainings',
     path: '/trainings',
     icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
+    // visible to all roles
   },
   {
     label: 'Documents',
     path: '/documents',
     icon: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z',
+    // visible to all roles
   },
   {
     label: 'Users',
     path: '/users',
     icon: 'M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+    roles: ['Admin'],
   },
 ];
 
@@ -116,6 +132,15 @@ const navItems = [
  * @returns {JSX.Element}
  */
 const Sidebar = ({ isOpen, onClose }) => {
+  const { user } = useAuth();
+  const userRoles = user?.roles || [];
+
+  /** Filter nav items based on the current user's roles. */
+  const visibleItems = navItems.filter((item) => {
+    if (!item.roles) return true; // no restriction — visible to everyone
+    return item.roles.some((role) => userRoles.includes(role));
+  });
+
   /**
    * Drag offset (px, negative-only) — follows the finger during a swipe
    * so the slide feels responsive. Resets to 0 after touchend.
@@ -256,7 +281,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       className={`
         fixed left-0 top-16 bottom-0 z-20 w-64
         overflow-hidden border-r
-        bg-white border-gray-200 dark:bg-gray-900 dark:border-gray-800
+        bg-white border-gray-200
         will-change-transform
         transition-[transform,width] duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -269,7 +294,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           on touch devices, hints that the sidebar can be swiped away */}
       <span
         aria-hidden="true"
-        className="absolute right-1 top-1/2 -translate-y-1/2 h-12 w-1 rounded-full bg-gray-300/40 dark:bg-gray-600/40 lg:hidden"
+        className="absolute right-1 top-1/2 -translate-y-1/2 h-12 w-1 rounded-full bg-gray-300/40 lg:hidden"
       />
 
       <div
@@ -279,7 +304,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       >
         <p
           id="sidebar-menu-label"
-          className="text-xs uppercase tracking-wider mb-4 px-3 text-gray-400 dark:text-gray-500"
+          className="text-xs uppercase tracking-wider mb-4 px-3 text-gray-400"
         >
           Menu
         </p>
@@ -288,7 +313,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           onKeyDown={onNavKeyDown}
           className="space-y-1"
         >
-          {navItems.map((item) => (
+          {visibleItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
@@ -309,8 +334,8 @@ const Sidebar = ({ isOpen, onClose }) => {
                 `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150
                 ${
                   isActive
-                    ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`
               }
             >
@@ -321,7 +346,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                     aria-hidden="true"
                     className={`absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full transition-opacity ${
                       isActive
-                        ? 'bg-indigo-600 dark:bg-indigo-400 opacity-100'
+                        ? 'bg-indigo-600 opacity-100'
                         : 'opacity-0'
                     }`}
                   />

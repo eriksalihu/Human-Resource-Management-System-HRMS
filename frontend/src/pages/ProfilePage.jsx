@@ -23,20 +23,20 @@ import useAuth from '../hooks/useAuth';
  * @returns {JSX.Element}
  */
 const ProfilePage = () => {
-  const { user, loading } = useAuth() || {};
+  const { user, loading, refreshUser } = useAuth() || {};
   const [savedTick, setSavedTick] = useState(0);
 
   /**
    * Handle a successful save from ProfileSettings.
    *
-   * We avoid a full page reload — the auth context will be updated with
-   * the next /auth/profile fetch (e.g. on next route change) but in the
-   * meantime we bump a local tick so any "you saved at X" UI can refresh.
-   * Future commit: add `refreshUser()` to AuthContext for a clean update.
+   * Calls `refreshUser()` so the auth context (and therefore the navbar
+   * avatar, name, etc.) reflects the updated profile immediately. Also
+   * bumps `savedTick` so the form re-mounts with the fresh user data.
    */
-  const handleSaved = useCallback(() => {
+  const handleSaved = useCallback(async () => {
+    if (refreshUser) await refreshUser();
     setSavedTick((t) => t + 1);
-  }, []);
+  }, [refreshUser]);
 
   if (loading) {
     return (
@@ -69,7 +69,7 @@ const ProfilePage = () => {
       {/* Headline card */}
       <section className="rounded-lg border border-gray-200 bg-white p-5">
         <div className="flex items-start gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-lg font-semibold overflow-hidden ring-4 ring-white shadow">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 text-lg font-semibold overflow-hidden ring-4 ring-white shadow">
             {user.profile_image ? (
               <img
                 src={user.profile_image}

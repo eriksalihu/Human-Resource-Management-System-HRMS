@@ -49,11 +49,11 @@ const TextareaWithCounter = forwardRef(function TextareaWithCounter(
   const used = text.length;
   const remaining = Math.max(0, maxLength - used);
 
-  let tone = 'text-gray-500 dark:text-gray-400';
+  let tone = 'text-gray-500';
   if (used >= maxLength) {
-    tone = 'text-rose-600 dark:text-rose-400 font-medium';
+    tone = 'text-rose-600 font-medium';
   } else if (remaining <= Math.ceil(maxLength * WARNING_THRESHOLD)) {
-    tone = 'text-amber-600 dark:text-amber-400';
+    tone = 'text-amber-600';
   }
 
   return (

@@ -173,11 +173,11 @@ const SessionTimeoutModal = () => {
       <div
         className="relative w-full max-w-md mx-4 rounded-xl shadow-2xl overflow-hidden animate-slide-in-down
           bg-white text-gray-900
-          dark:bg-gray-900 dark:text-gray-100"
+"
       >
         {/* Header strip */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b bg-amber-50 border-amber-100 text-amber-900 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-200">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-200/70 dark:bg-amber-500/30">
+        <div className="flex items-center gap-3 px-5 py-4 border-b bg-amber-50 border-amber-100 text-amber-900">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-200/70">
             <svg
               className="h-5 w-5"
               fill="none"
@@ -210,7 +210,7 @@ const SessionTimeoutModal = () => {
         <div className="px-5 py-5 space-y-4">
           <p
             id="session-timeout-desc"
-            className="text-sm text-gray-700 dark:text-gray-300"
+            className="text-sm text-gray-700"
           >
             For your security, HRMS ends inactive sessions automatically.
             Click <span className="font-semibold">Stay logged in</span> to
@@ -220,8 +220,8 @@ const SessionTimeoutModal = () => {
           <div
             className={`flex items-baseline justify-center gap-2 rounded-lg p-4 font-mono tabular-nums ${
               expired
-                ? 'bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-200'
-                : 'bg-gray-50 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
+                ? 'bg-rose-50 text-rose-800'
+                : 'bg-gray-50 text-gray-900'
             }`}
             aria-live="polite"
             aria-atomic="true"
@@ -237,7 +237,7 @@ const SessionTimeoutModal = () => {
           {error && (
             <p
               role="alert"
-              className="text-xs rounded-md p-2 bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-200 dark:ring-rose-500/30"
+              className="text-xs rounded-md p-2 bg-rose-50 text-rose-700 ring-1 ring-rose-200"
             >
               {error}
             </p>
@@ -245,12 +245,12 @@ const SessionTimeoutModal = () => {
         </div>
 
         {/* Actions */}
-        <div className="px-5 py-3 border-t bg-gray-50 dark:bg-gray-800/50 dark:border-gray-700 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
+        <div className="px-5 py-3 border-t bg-gray-50 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
           <button
             type="button"
             onClick={handleClose}
             disabled={extending || signingOut}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
+            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             Dismiss
           </button>
@@ -258,7 +258,7 @@ const SessionTimeoutModal = () => {
             type="button"
             onClick={handleLogout}
             disabled={extending || signingOut}
-            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 dark:bg-rose-500/10 dark:border-rose-500/40 dark:text-rose-200 dark:hover:bg-rose-500/20 disabled:opacity-50"
+            className="px-3 py-2 text-sm font-medium rounded-md bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-50"
           >
             {signingOut ? 'Signing out…' : 'Sign out'}
           </button>

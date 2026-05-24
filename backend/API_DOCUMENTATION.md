@@ -2,7 +2,7 @@
 
 Complete reference for the HR Management System REST API.
 
-- **Base URL (dev):** `http://localhost:5000/api`
+- **Base URL (dev):** `http://localhost:5001/api`
 - **Content type:** `application/json` (except document upload → `multipart/form-data`)
 - **Auth:** JWT Bearer access token in the `Authorization` header; refresh token in an httpOnly cookie.
 
@@ -82,14 +82,14 @@ Query params: `?page=1&limit=10&sortBy=<col>&sortOrder=ASC|DESC&search=<term>`.
 
 **Register**
 ```bash
-curl -X POST http://localhost:5000/api/auth/register \
+curl -X POST http://localhost:5001/api/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"ada@hrms.local","password":"Test1234","first_name":"Ada","last_name":"Lovelace"}'
 ```
 
 **Login** (capture the refresh cookie)
 ```bash
-curl -X POST http://localhost:5000/api/auth/login \
+curl -X POST http://localhost:5001/api/auth/login \
   -H 'Content-Type: application/json' \
   -c cookies.txt \
   -d '{"email":"ada@hrms.local","password":"Test1234"}'
@@ -98,7 +98,7 @@ curl -X POST http://localhost:5000/api/auth/login \
 
 **Reset password**
 ```bash
-curl -X POST http://localhost:5000/api/auth/reset-password \
+curl -X POST http://localhost:5001/api/auth/reset-password \
   -H 'Content-Type: application/json' \
   -d '{"token":"<from-email-link>","password":"NewPass123"}'
 ```
@@ -121,7 +121,7 @@ curl -X POST http://localhost:5000/api/auth/reset-password \
 Filters: `department_id`, `position_id`, `statusi`, `lloji_kontrates`, `search`. Sortable by `id`, `numri_punonjesit`, `data_punesimit`, `statusi`, `lloji_kontrates`, `created_at`, plus joined `first_name`, `last_name`, `email`, `department_emertimi`, `position_emertimi`.
 
 ```bash
-curl 'http://localhost:5000/api/employees?department_id=2&statusi=active&page=1&limit=10' \
+curl 'http://localhost:5001/api/employees?department_id=2&statusi=active&page=1&limit=10' \
   -H 'Authorization: Bearer <token>'
 ```
 
@@ -165,7 +165,7 @@ curl 'http://localhost:5000/api/employees?department_id=2&statusi=active&page=1&
 | DELETE | `/:id` | Admin | Delete |
 
 ```bash
-curl -X POST http://localhost:5000/api/salaries \
+curl -X POST http://localhost:5001/api/salaries \
   -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' \
   -d '{"employee_id":12,"paga_baze":1200,"bonuse":150,"zbritje":25,"muaji":5,"viti":2026}'
 ```
@@ -256,7 +256,7 @@ curl -X POST http://localhost:5000/api/salaries \
 
 Upload rules: `pdf, doc, docx, jpg, png` only, ≤ 5 MB, filename sanitized.
 ```bash
-curl -X POST http://localhost:5000/api/documents \
+curl -X POST http://localhost:5001/api/documents \
   -H 'Authorization: Bearer <token>' \
   -F 'file=@contract.pdf' -F 'employee_id=12' -F 'lloji=contract' -F 'emertimi=Employment Contract'
 ```
@@ -306,6 +306,6 @@ curl -X POST http://localhost:5000/api/documents \
 | GET | `/` | Public | Status, DB connectivity, uptime, version, memory (503 when DB down) |
 
 ```bash
-curl http://localhost:5000/api/health
+curl http://localhost:5001/api/health
 # → { "status": "ok", "database": "connected", "uptime_seconds": 1284, "version": "1.0.0", ... }
 ```

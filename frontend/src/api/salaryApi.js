@@ -102,6 +102,26 @@ export const create = async (payload) => {
 };
 
 /**
+ * Generate monthly payroll for all active employees based on position
+ * salary bands. Supports dry-run preview and base-pay strategy selection.
+ *
+ * @param {Object} payload
+ * @param {number} payload.muaji - Month 1-12
+ * @param {number} payload.viti - Year YYYY
+ * @param {string} [payload.baseStrategy='mid'] - 'min' | 'mid' | 'max'
+ * @param {number} [payload.department_id] - Scope to a single department
+ * @param {number} [payload.default_bonuse=0]
+ * @param {number} [payload.default_zbritje=0]
+ * @param {string} [payload.statusi='pending']
+ * @param {boolean} [payload.dryRun=false]
+ * @returns {Promise<Object>}
+ */
+export const generatePayroll = async (payload) => {
+  const { data } = await axiosInstance.post('/salaries/generate', payload);
+  return data.data;
+};
+
+/**
  * Bulk create salary records for month-end payroll processing.
  *
  * @param {Object} payload
@@ -143,6 +163,7 @@ export default {
   getById,
   getEmployeeHistory,
   getPayrollSummary,
+  generatePayroll,
   create,
   bulkCreate,
   update,

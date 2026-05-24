@@ -309,6 +309,23 @@ export const AuthProvider = ({ children }) => {
     return Boolean(token);
   }, [refreshSession]);
 
+  /**
+   * Re-fetch the user profile from the server and update context state.
+   * Useful after a profile save so the navbar, sidebar, and any other
+   * auth-derived UI reflects the updated data without a page reload.
+   *
+   * @returns {Promise<Object|null>} The refreshed user, or null on failure
+   */
+  const refreshUser = useCallback(async () => {
+    try {
+      const profile = await authApi.getProfile();
+      setUser(profile);
+      return profile;
+    } catch {
+      return null;
+    }
+  }, []);
+
   /** Dismiss the warning without refreshing — user picks "Sign out". */
   const dismissWarning = useCallback(() => {
     setShowWarning(false);
@@ -325,6 +342,7 @@ export const AuthProvider = ({ children }) => {
       login,
       logout,
       register,
+      refreshUser,
 
       // New: session-timeout helpers
       sessionExpiresAt,
@@ -339,6 +357,7 @@ export const AuthProvider = ({ children }) => {
       login,
       logout,
       register,
+      refreshUser,
       sessionExpiresAt,
       showWarning,
       extendSession,

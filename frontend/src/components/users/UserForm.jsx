@@ -46,8 +46,8 @@ const ROLE_OPTIONS = [
  */
 const STRENGTH_TONES = [
   { label: 'Empty',     bar: 'bg-gray-200',     text: 'text-gray-500' },
-  { label: 'Weak',      bar: 'bg-rose-500',     text: 'text-rose-700' },
-  { label: 'Weak',      bar: 'bg-rose-500',     text: 'text-rose-700' },
+  { label: 'Weak',      bar: 'bg-rose-50',     text: 'text-rose-700' },
+  { label: 'Weak',      bar: 'bg-rose-50',     text: 'text-rose-700' },
   { label: 'Fair',      bar: 'bg-amber-500',    text: 'text-amber-700' },
   { label: 'Good',      bar: 'bg-emerald-500',  text: 'text-emerald-700' },
   { label: 'Strong',    bar: 'bg-emerald-600',  text: 'text-emerald-800' },

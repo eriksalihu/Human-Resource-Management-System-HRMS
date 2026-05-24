@@ -1,6 +1,8 @@
 /**
  * @file frontend/src/pages/LeavesPage.jsx
- * @description Leaves page with role-based tabs — My Requests, All Requests (HR), Pending Approvals (Manager), and Calendar view
+ * @description Leaves page with two tabs — unified Requests view (role-aware)
+ *              and Calendar. HR/Admin see all requests with inline
+ *              Approve/Reject; employees see only their own with Cancel.
  * @author Dev B
  */
 
@@ -8,22 +10,20 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as leaveRequestApi from '../api/leaveRequestApi';
 import LeaveRequestList from '../components/leaves/LeaveRequestList';
 import LeaveRequestForm from '../components/leaves/LeaveRequestForm';
-import LeaveApproval from '../components/leaves/LeaveApproval';
 import Modal from '../components/common/Modal';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { SkeletonTable } from '../components/common/SkeletonLoader';
 import { useToast } from '../components/common/Toast';
 import useAuth from '../hooks/useAuth';
 
-/** Role groupings used to decide which tabs are visible. */
+/** Role groupings used to decide which actions are available. */
 const HR_ROLES = ['Admin', 'HR Manager'];
 const MANAGER_ROLES = ['Department Manager'];
 
 /** Top-level tab identifiers. */
 const TABS = {
   MINE: 'mine',
-  ALL: 'all',
-  APPROVALS: 'approvals',
+  REQUESTS: 'requests',
   CALENDAR: 'calendar',
 };
 
@@ -60,7 +60,6 @@ const inRange = (day, start, end) =>
  */
 const buildMonthGrid = (year, monthIndex) => {
   const firstOfMonth = new Date(year, monthIndex, 1);
-  // 0=Sun, 1=Mon ... shift so Monday is the first column
   const offset = (firstOfMonth.getDay() + 6) % 7;
   const start = new Date(year, monthIndex, 1 - offset);
 
@@ -76,14 +75,12 @@ const buildMonthGrid = (year, monthIndex) => {
 /**
  * LeavesPage — orchestrator for the leaves module.
  *
- * Tab visibility is driven by the caller's role set:
- *   - "My requests" — every authenticated employee
- *   - "All requests" — HR / Admin
- *   - "Pending approvals" — Department Managers (and HR / Admin who often
- *     also have direct reports)
- *   - "Calendar" — every authenticated user, scoped to their visible data
- *
- * @returns {JSX.Element}
+ * Two tabs:
+ *   - "All Requests" — role-aware unified view:
+ *       • Employee: sees only own requests via /me with Edit, Cancel
+ *       • HR / Admin: sees all requests with Edit, Approve, Reject, Cancel, Delete
+ *       • Department Manager: sees all requests with Approve, Reject
+ *   - "Calendar" — month grid with leave overlays
  */
 const LeavesPage = () => {
   const { user } = useAuth() || {};
@@ -91,13 +88,12 @@ const LeavesPage = () => {
 
   const isHR = roles.some((r) => HR_ROLES.includes(r));
   const isManager = roles.some((r) => MANAGER_ROLES.includes(r));
+  const canApprove = isHR || isManager;
 
-  /** Tabs available to the current user. */
   const availableTabs = useMemo(() => {
     const tabs = [{ id: TABS.MINE, label: 'My Requests' }];
-    if (isHR) tabs.push({ id: TABS.ALL, label: 'All Requests' });
     if (isHR || isManager)
-      tabs.push({ id: TABS.APPROVALS, label: 'Pending Approvals' });
+      tabs.push({ id: TABS.REQUESTS, label: 'All Requests' });
     tabs.push({ id: TABS.CALENDAR, label: 'Calendar' });
     return tabs;
   }, [isHR, isManager]);
@@ -111,7 +107,7 @@ const LeavesPage = () => {
 
   /** Modal form state. */
   const [formOpen, setFormOpen] = useState(false);
-  const [formMode, setFormMode] = useState('create'); // 'create' | 'edit'
+  const [formMode, setFormMode] = useState('create');
   const [formInitialData, setFormInitialData] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -121,10 +117,6 @@ const LeavesPage = () => {
 
   const { addToast } = useToast();
 
-  /**
-   * Switch to a new tab, marking it as visited so its child mounts (and
-   * stays mounted across switches via `hidden`).
-   */
   const handleTabChange = (tabId) => {
     setActiveTab(tabId);
     setVisitedTabs((prev) => {
@@ -178,12 +170,7 @@ const LeavesPage = () => {
     }
   };
 
-  /**
-   * Stage a destructive / approval action behind a confirm dialog.
-   *
-   * @param {'cancel'|'approve'|'reject'} kind
-   * @param {Object} row
-   */
+  /** Stage a destructive / approval action behind a confirm dialog. */
   const stageAction = (kind, row) => setPendingAction({ kind, row });
 
   /** Run the staged action against the API. */
@@ -212,7 +199,9 @@ const LeavesPage = () => {
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">Leave Requests</h1>
+          <h1 className="text-2xl font-bold text-gray-900 truncate">
+            Leave Requests
+          </h1>
           <p className="text-sm text-gray-500">
             Submit time-off, track approvals, and view team coverage
           </p>
@@ -221,7 +210,10 @@ const LeavesPage = () => {
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
+        <nav
+          className="-mb-px flex space-x-6 overflow-x-auto"
+          aria-label="Tabs"
+        >
           {availableTabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -243,7 +235,7 @@ const LeavesPage = () => {
         </nav>
       </div>
 
-      {/* Tab panels — lazy mounted via visitedTabs, kept alive via `hidden` */}
+      {/* ── My Requests (every user) ────────────────────────────── */}
       {visitedTabs.has(TABS.MINE) && (
         <div hidden={activeTab !== TABS.MINE}>
           <MyRequestsPanel
@@ -255,34 +247,33 @@ const LeavesPage = () => {
         </div>
       )}
 
-      {visitedTabs.has(TABS.ALL) && isHR && (
-        <div hidden={activeTab !== TABS.ALL}>
-          <LeaveRequestList
-            key={`all-${refreshKey}`}
-            onAdd={handleAdd}
-            onEdit={handleEdit}
-            onApprove={(row) => stageAction('approve', row)}
-            onReject={(row) => stageAction('reject', row)}
-            onCancel={(row) => stageAction('cancel', row)}
-            onDelete={async (row) => {
-              await leaveRequestApi.remove(row.id);
-            }}
-          />
+      {/* ── All Requests (HR / Manager — merged with approve/reject) */}
+      {visitedTabs.has(TABS.REQUESTS) && (isHR || isManager) && (
+        <div hidden={activeTab !== TABS.REQUESTS}>
+          {isHR ? (
+            <LeaveRequestList
+              key={`all-${refreshKey}`}
+              showAddButton={false}
+              onEdit={handleEdit}
+              onApprove={(row) => stageAction('approve', row)}
+              onReject={(row) => stageAction('reject', row)}
+              onCancel={(row) => stageAction('cancel', row)}
+              onDelete={async (row) => {
+                await leaveRequestApi.remove(row.id);
+              }}
+            />
+          ) : (
+            <LeaveRequestList
+              key={`mgr-${refreshKey}`}
+              showAddButton={false}
+              onApprove={(row) => stageAction('approve', row)}
+              onReject={(row) => stageAction('reject', row)}
+            />
+          )}
         </div>
       )}
 
-      {visitedTabs.has(TABS.APPROVALS) && (isHR || isManager) && (
-        <div hidden={activeTab !== TABS.APPROVALS}>
-          <LeaveApproval
-            key={`approvals-${refreshKey}`}
-            departmentId={
-              !isHR && isManager ? user?.employee?.department_id : undefined
-            }
-            onChanged={refreshAll}
-          />
-        </div>
-      )}
-
+      {/* ── Calendar panel ─────────────────────────────────────── */}
       {visitedTabs.has(TABS.CALENDAR) && (
         <div hidden={activeTab !== TABS.CALENDAR}>
           <LeaveCalendar
@@ -349,13 +340,9 @@ const LeavesPage = () => {
 };
 
 /* ------------------------------------------------------------------ */
-/* My Requests panel — uses /leave-requests/me which returns {requests, balance}. */
+/* My Requests panel — self-service view for Employee-only users       */
 /* ------------------------------------------------------------------ */
 
-/**
- * MyRequestsPanel — self-service view of the caller's own requests with a
- * compact balance summary at the top.
- */
 const MyRequestsPanel = ({ onAdd, onEdit, onCancel }) => {
   const [data, setData] = useState({ requests: [], balance: [] });
   const [loading, setLoading] = useState(true);
@@ -519,11 +506,6 @@ const MyRequestsPanel = ({ onAdd, onEdit, onCancel }) => {
 /* Calendar tab — month grid with leave bars                          */
 /* ------------------------------------------------------------------ */
 
-/**
- * LeaveCalendar — monthly grid showing approved + pending leaves overlapping
- * each day. `scope='mine'` pulls `/me`; `scope='all'` pulls the org-wide
- * `/leave-requests` paginated endpoint with a generous limit.
- */
 const LeaveCalendar = ({ scope = 'mine' }) => {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
@@ -532,9 +514,11 @@ const LeaveCalendar = ({ scope = 'mine' }) => {
   const [loading, setLoading] = useState(true);
   const { addToast } = useToast();
 
-  const cells = useMemo(() => buildMonthGrid(year, monthIndex), [year, monthIndex]);
+  const cells = useMemo(
+    () => buildMonthGrid(year, monthIndex),
+    [year, monthIndex]
+  );
 
-  /** Range bounds for the current view (first/last visible cell). */
   const rangeStart = isoDate(cells[0]);
   const rangeEnd = isoDate(cells[cells.length - 1]);
 
@@ -544,7 +528,7 @@ const LeaveCalendar = ({ scope = 'mine' }) => {
       if (scope === 'all') {
         const result = await leaveRequestApi.getAll({
           page: 1,
-          limit: 200,
+          limit: 100,
           from_date: rangeStart,
           to_date: rangeEnd,
         });
@@ -568,7 +552,6 @@ const LeaveCalendar = ({ scope = 'mine' }) => {
     load();
   }, [load]);
 
-  /** Map of YYYY-MM-DD → leaves overlapping that day. */
   const leavesByDay = useMemo(() => {
     const map = new Map();
     for (const cell of cells) {
@@ -588,12 +571,11 @@ const LeaveCalendar = ({ scope = 'mine' }) => {
     return map;
   }, [rows, cells]);
 
-  const monthLabel = new Date(year, monthIndex, 1).toLocaleDateString('en-GB', {
-    month: 'long',
-    year: 'numeric',
-  });
+  const monthLabel = new Date(year, monthIndex, 1).toLocaleDateString(
+    'en-GB',
+    { month: 'long', year: 'numeric' }
+  );
 
-  /** Step the month forward (+1) or back (-1). */
   const stepMonth = (delta) => {
     const next = new Date(year, monthIndex + delta, 1);
     setYear(next.getFullYear());
@@ -604,7 +586,6 @@ const LeaveCalendar = ({ scope = 'mine' }) => {
 
   return (
     <div className="space-y-4">
-      {/* Header with month navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">{monthLabel}</h2>
@@ -660,7 +641,6 @@ const LeaveCalendar = ({ scope = 'mine' }) => {
         <SkeletonTable rows={6} columns={5} />
       ) : (
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          {/* Weekday header */}
           <div className="grid grid-cols-7 bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
             {weekdayLabels.map((d) => (
               <div key={d} className="px-2 py-2 text-center">
@@ -668,7 +648,6 @@ const LeaveCalendar = ({ scope = 'mine' }) => {
               </div>
             ))}
           </div>
-          {/* Day cells */}
           <div className="grid grid-cols-7">
             {cells.map((cell) => {
               const day = isoDate(cell);
@@ -679,7 +658,7 @@ const LeaveCalendar = ({ scope = 'mine' }) => {
                 <div
                   key={day}
                   className={`min-h-[88px] border-t border-l border-gray-100 p-1.5 ${
-                    inMonth ? 'bg-white' : 'bg-gray-50/60'
+                    inMonth ? 'bg-white' : 'bg-gray-50'
                   }`}
                 >
                   <div className="flex items-center justify-between text-xs">
@@ -700,8 +679,7 @@ const LeaveCalendar = ({ scope = 'mine' }) => {
                       <div
                         key={`${lr.id}-${day}`}
                         className={`truncate rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset ${
-                          TYPE_BADGE_CLASS[lr.lloji] ||
-                          TYPE_BADGE_CLASS.unpaid
+                          TYPE_BADGE_CLASS[lr.lloji] || TYPE_BADGE_CLASS.unpaid
                         } ${STATUS_RING_CLASS[lr.statusi] || 'ring-transparent'}`}
                         title={`${lr.first_name || ''} ${lr.last_name || ''} — ${lr.lloji} (${lr.statusi})`.trim()}
                       >

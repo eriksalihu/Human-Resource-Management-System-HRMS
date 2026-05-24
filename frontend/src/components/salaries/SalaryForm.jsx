@@ -124,7 +124,7 @@ const SalaryForm = ({ initialData, onSubmit, onCancel, submitting = false }) => 
     const fetchEmployees = async () => {
       setLoadingEmployees(true);
       try {
-        const result = await employeeApi.getAll({ limit: 200, statusi: 'active' });
+        const result = await employeeApi.getAll({ limit: 100, statusi: 'active' });
         if (cancelled) return;
         setEmployees(result.data || []);
       } catch {
@@ -357,24 +357,24 @@ const SalaryForm = ({ initialData, onSubmit, onCancel, submitting = false }) => 
         </h4>
         <dl className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 gap-x-4 text-sm">
           <div className="flex justify-between sm:block">
-            <dt className="text-xs uppercase tracking-wider text-indigo-700/80">Gross</dt>
+            <dt className="text-xs uppercase tracking-wider text-indigo-700">Gross</dt>
             <dd className="font-medium text-indigo-900">{formatCurrency(preview.gross)}</dd>
           </div>
           <div className="flex justify-between sm:block">
-            <dt className="text-xs uppercase tracking-wider text-indigo-700/80">Pension (5%)</dt>
+            <dt className="text-xs uppercase tracking-wider text-indigo-700">Pension (5%)</dt>
             <dd className="text-indigo-900">− {formatCurrency(preview.pension)}</dd>
           </div>
           <div className="flex justify-between sm:block">
-            <dt className="text-xs uppercase tracking-wider text-indigo-700/80">Health (3.5%)</dt>
+            <dt className="text-xs uppercase tracking-wider text-indigo-700">Health (3.5%)</dt>
             <dd className="text-indigo-900">− {formatCurrency(preview.health)}</dd>
           </div>
           <div className="flex justify-between sm:block">
-            <dt className="text-xs uppercase tracking-wider text-indigo-700/80">Tax (10%)</dt>
+            <dt className="text-xs uppercase tracking-wider text-indigo-700">Tax (10%)</dt>
             <dd className="text-indigo-900">− {formatCurrency(preview.tax)}</dd>
           </div>
           {preview.discretionary > 0 && (
             <div className="flex justify-between sm:block">
-              <dt className="text-xs uppercase tracking-wider text-indigo-700/80">Other deductions</dt>
+              <dt className="text-xs uppercase tracking-wider text-indigo-700">Other deductions</dt>
               <dd className="text-indigo-900">− {formatCurrency(preview.discretionary)}</dd>
             </div>
           )}
@@ -383,7 +383,7 @@ const SalaryForm = ({ initialData, onSubmit, onCancel, submitting = false }) => 
             <dd className="text-lg font-bold text-indigo-900">{formatCurrency(preview.net)}</dd>
           </div>
         </dl>
-        <p className="text-[11px] text-indigo-700/70 mt-2 leading-snug">
+        <p className="text-[11px] text-indigo-700 mt-2 leading-snug">
           Preview only — the server recalculates net pay on submit.
         </p>
       </div>

@@ -6,8 +6,12 @@
 
 const LeaveRequest = require('../models/LeaveRequest');
 const Employee = require('../models/Employee');
+const Role = require('../models/Role');
 const Notification = require('../models/Notification');
 const { AppError } = require('../middleware/errorHandler');
+
+/** Roles that should be notified about every new leave request. */
+const LEAVE_NOTIFY_ROLES = ['Admin', 'HR Manager'];
 
 /**
  * Best-effort notification — wraps Notification.create() in try/catch so a
@@ -228,9 +232,16 @@ const create = async (req, res, next) => {
 
     const request = await LeaveRequest.findById(requestId);
 
-    // Notify the subject + their manager (if any) that a new request landed.
+    // Notify the subject, their direct manager, and all Admin / HR Manager
+    // users so every stakeholder sees the new request immediately.
     const subject = await Employee.findById(targetEmployeeId);
     if (subject) {
+      const subjectName =
+        `${subject.first_name || ''} ${subject.last_name || ''}`.trim() || 'An employee';
+      const reviewMsg =
+        `${subjectName} has submitted a ${lloji} leave request (${data_fillimit} → ${data_perfundimit}).`;
+
+      // 1. Confirmation to the requester.
       await notify({
         userId: subject.user_id,
         title: 'Leave request submitted',
@@ -239,18 +250,33 @@ const create = async (req, res, next) => {
         link: `/leaves`,
       });
 
+      // 2. Direct manager (if assigned).
+      const alreadyNotified = new Set([subject.user_id]);
       if (subject.menaxheri_id) {
         const manager = await Employee.findById(subject.menaxheri_id);
         if (manager) {
+          alreadyNotified.add(manager.user_id);
           await notify({
             userId: manager.user_id,
             title: 'New leave request to review',
-            message: `${subject.first_name || ''} ${subject.last_name || ''}`.trim() +
-              ` has submitted a ${lloji} leave request (${data_fillimit} → ${data_perfundimit}).`,
+            message: reviewMsg,
             type: 'warning',
             link: `/leaves`,
           });
         }
+      }
+
+      // 3. All Admin / HR Manager users — skip anyone already notified above.
+      const hrAdminIds = await Role.getUserIdsByRoleNames(LEAVE_NOTIFY_ROLES);
+      for (const uid of hrAdminIds) {
+        if (alreadyNotified.has(uid)) continue;
+        await notify({
+          userId: uid,
+          title: 'New leave request to review',
+          message: reviewMsg,
+          type: 'warning',
+          link: `/leaves`,
+        });
       }
     }
 

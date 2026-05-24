@@ -96,15 +96,39 @@ const refreshCookieOptions = (overrides = {}) => ({
 });
 
 /**
+ * Normalise an IP address so that localhost variants (::1, ::ffff:127.0.0.1,
+ * 127.0.0.1) all resolve to a single canonical form. Node/Express can
+ * report different formats depending on whether the incoming connection
+ * was IPv4 or IPv6 — inconsistency here would break fingerprint checks.
+ */
+const normaliseIp = (raw) => {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (
+    trimmed === '::1' ||
+    trimmed === '::ffff:127.0.0.1' ||
+    trimmed === '127.0.0.1'
+  ) {
+    return '127.0.0.1';
+  }
+  if (trimmed.startsWith('::ffff:')) {
+    return trimmed.slice('::ffff:'.length);
+  }
+  return trimmed;
+};
+
+/**
  * Extract the client IP, honouring `x-forwarded-for` when behind a
  * reverse proxy. Used both for audit (saved on the RefreshTokens row)
  * and to compute the access-token fingerprint.
  */
-const getClientIp = (req) =>
-  req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-  req.ip ||
-  req.connection?.remoteAddress ||
-  null;
+const getClientIp = (req) => {
+  const xff = req.headers['x-forwarded-for'];
+  if (xff) {
+    return normaliseIp(String(xff).split(',')[0]);
+  }
+  return normaliseIp(req.ip || req.connection?.remoteAddress || null);
+};
 
 /**
  * POST /api/auth/register
@@ -430,6 +454,30 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
+/**
+ * PUT /api/auth/password
+ * Change the authenticated user's password. Requires current password
+ * verification before accepting the new one.
+ */
+const changePassword = async (req, res, next) => {
+  try {
+    const { current_password, new_password } = req.body;
+
+    if (!current_password || !new_password) {
+      throw new AppError('current_password and new_password are required', 400);
+    }
+
+    await authService.changePassword(req.user.id, current_password, new_password);
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully.',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -438,5 +486,6 @@ module.exports = {
   getProfile,
   forgotPassword,
   resetPassword,
+  changePassword,
 };
 module.exports.refreshCookieOptions = refreshCookieOptions;

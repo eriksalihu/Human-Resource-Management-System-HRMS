@@ -15,7 +15,7 @@ require('dotenv').config({
 });
 
 /** Default password for every seeded user. Reset on first login. */
-const DEFAULT_PASSWORD = process.env.SEED_EMPLOYEE_PASSWORD || 'Employee@1234';
+const DEFAULT_PASSWORD = process.env.SEED_EMPLOYEE_PASSWORD || 'Admin@1234';
 
 /** Number of bcrypt rounds — same as the auth service uses in prod. */
 const BCRYPT_ROUNDS = 12;

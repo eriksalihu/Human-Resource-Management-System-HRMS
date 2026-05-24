@@ -72,6 +72,15 @@ export default defineConfig({
     },
   },
 
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+      },
+    },
+  },
+
   // Dev-server hint: prebundle the heavy deps so `vite` cold-starts fast.
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'axios'],
